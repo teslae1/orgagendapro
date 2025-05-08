@@ -203,15 +203,39 @@ function! HandleOrgCtrlEnterKey()
   " Default behavior: just insert a new line
   execute "normal! o"
 endfunction
-
-function! HandleOrgCtrlNKey()
-    " No active search, set search pattern to find unchecked boxes
-    let @/ = '\[ \]'
-    " Jump to first match
-    normal! n
-endfunction
 autocmd FileType org nnoremap <buffer> <C-CR> :call HandleOrgCtrlEnterKey()<CR>
-autocmd FileType org nnoremap <buffer> <C-n> :call HandleOrgCtrlNKey()<CR>
+
+function! SearchForwardOpenChecklistItem()
+  call SearchForward('\[ \]')
+endfunction
+autocmd FileType org nnoremap <buffer> <C-j> :call SearchForwardOpenChecklistItem()<CR>
+
+function! SearchBackOpenChecklistItem()
+  call SearchBackward('\[ \]')
+endfunction
+autocmd FileType org nnoremap <buffer> <S-j> :call SearchBackOpenChecklistItem()<CR>
+
+function! SearchForwardOrgHeader()
+  call SearchForward('^\*\+\s')
+endfunction
+autocmd FileType org nnoremap <buffer> <C-h> :call SearchForwardOrgHeader()<CR>
+
+function! SearchBackwardOrgHeader()
+  call SearchBackward('^\*\+\s')
+endfunction
+autocmd FileType org nnoremap <buffer> <S-h> :call SearchBackwardOrgHeader()<CR>
+
+function! SearchForward(pattern)
+    let @/ = a:pattern
+    normal! n
+    nohlsearch
+endfunction
+
+function! SearchBackward(pattern)
+    let @/ = a:pattern
+    normal! N
+    nohlsearch
+endfunction
 
 " Narrow view toggle for org mode
 let g:narrow_view_active = 0
@@ -992,3 +1016,7 @@ endfunction
 " Command and mapping to open the org calendar
 command! -nargs=0 OrgCal call s:OpenOrgCalendar('daily')
 nnoremap <C-c> :OrgCal<CR>
+
+" Generate help tags
+let s:path = fnamemodify(resolve(expand('<sfile>:p')), ':h:h')
+execute 'helptags ' . s:path . '/doc'
