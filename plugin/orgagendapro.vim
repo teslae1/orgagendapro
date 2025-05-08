@@ -286,7 +286,7 @@ autocmd FileType org nnoremap <buffer> <Space>msN :call DisableNarrow()<CR>
 function! ShiftOrgDateYears(years)
   let line = getline('.')
   let cursor_col = col('.')
-  let [year, month, day, day_name, postfix, match_start, date_end] = ExtractDateFromCurrentLine()
+  let [year, month, day, day_name, postfix, match_start, date_end, date_str] = ExtractDateFromCurrentLine()
   let year = year + 1
   let month_str = EnsurePrefixZeroIfLessThanTen(month)
   let day_str = EnsurePrefixZeroIfLessThanTen(day)
@@ -311,10 +311,12 @@ function! ShiftOrgDateMonths(months)
   let line = getline('.')
   let cursor_col = col('.')
   if a:months < 0
-    Error "Invalid months: must be non-negative"
+    echo "Invalid months: must be non-negative"
+    return
   endif
 
-  let [year, month, day, day_name, postfix, match_start, date_end] = ExtractDateFromCurrentLine()
+
+  let [year, month, day, day_name, postfix, match_start, date_end, date_str] = ExtractDateFromCurrentLine()
   let month = month + a:months
   if month > 12
     let year = year + (month / 12) 
@@ -364,42 +366,57 @@ function! ExtractDateFromCurrentLine()
       let postfix = matches[3]  
       
       let [year, month, day] = split(date_only, '-')
-      return [year, month, day, day_name, postfix, match_start, date_end]
+      return [year, month, day, day_name, postfix, match_start, date_end, date_only]
     endif
     let start_pos = match_start + 1
   endwhile
+  return []
 endfunction
 
 function! ShiftOrgDateDays(days)
 
   let line = getline('.')
   let cursor_col = col('.')
-  
-  
-  let [year, month, day, day_name, postfix, match_start, date_end] = ExtractDateFromCurrentLine()
 
-  let timestamp = 0
+  let date_result = ExtractDateFromCurrentLine()
+  if len(date_result) < 1
+    echo "No date found near cursor" 
+    return
+  endif
   
+  let [year, month, day, day_name, postfix, match_start, date_end, date_str] = date_result
+
   let current_timestamp = localtime()
-  let current_ymd = strftime('%Y-%m-%d', current_timestamp)
-  let [c_year, c_month, c_day] = split(current_ymd, '-')
-  
-  let days_diff = 0
-  let days_diff += (year - c_year) * 365
-  let days_diff += (month - c_month) * 30
-  let days_diff += (day - c_day)
-  
-  let new_timestamp = current_timestamp + (days_diff + a:days) * 86400
-  
-  let new_date = strftime('%Y-%m-%d', new_timestamp)
+  let forward_search = current_timestamp
+  let backward_search = current_timestamp 
+  let match_timestamp = ""
+  let days_range_to_search = 365 * 20
+  for i in range(days_range_to_search)
+    if ConvertTimestampToDatePrefixStr(forward_search) == date_str
+      let match_timestamp = forward_search
+      break
+    endif
+    let forward_search = IncrementTimestampByDays(forward_search, 1)
+    if ConvertTimestampToDatePrefixStr(backward_search) == date_str
+      let match_timestamp = backward_search
+      break
+    endif
+    let backward_search = IncrementTimestampByDays(backward_search, -1)
+  endfor
+  if len(match_timestamp) < 1
+    echo "current date could not be converted to timestamp - could not find in next or past 20 years"
+    return
+  endif
 
+  let new_timestamp = IncrementTimestampByDays(match_timestamp, a:days)
+  let new_date = ConvertTimestampToDatePrefixStr(new_timestamp)
   let new_day = strftime('%a', new_timestamp)
-  
   let new_date_tag = '<' . new_date . ' ' . new_day . postfix . '>'
-  
   call UpdateDateOnCurrentLine(line, match_start, new_date_tag, date_end)
   
   call cursor(line('.'), cursor_col)
+
+  
 endfunction
 
 autocmd FileType org nnoremap <buffer> <S-Right> :call ShiftOrgDateDays(1)<CR>
@@ -445,11 +462,11 @@ function! s:PopulateOrgCalendar(mode, current_timestamp)
   let line_num = 4
 
   if exists('g:orgcal_filepaths') == 0 
-    Error "Cannot populate org calendar: exp variable g:orgcal_filepaths to exist'
+    echo "Cannot populate calendar: exp variable g:orgcal_filepaths to exist"
     return
   endif
   if empty(g:orgcal_filepaths)
-    Error "Cannot populate org calendar: exp variable g:orgcal_filepaths to not be empty'
+    echo "Cannot populate calendar: exp variable g:orgcal_filepaths to not be empty"
     return
   endif
 
