@@ -7,20 +7,20 @@ for Vim with zero dependencies - all written in vimscript.
 let g:orgcal_filepaths = ['C:\my\org\file1.org', 'C:\my\org\file2.org']
 
 - Key shortcuts when in ".org" files
-  - ctrl + C                   -> opens calendar view
-  - Enter on a "- [ ]"         -> cycles its states of "-/x/ "
-  - ctrl + Enter on a "- [ ]"         -> adds a new empty [ ] at the line below with same indentation
-  - Enter on a "* TODO header" -> marks it as done 
-  - ctrl + j -> go to next open "- [ ]"
-  - shift + j -> go to previous open "- [ ]"
-  - ctrl + h -> go to next "* header"
-  - shift + h -> go to previous "* header"
-  - space + msn -> narrows view to current "* header"
-  - space + msN -> disables narrow view 
-  - shift + right arrow on "SCHEDULED <2025-01-14>" -> increments date by one day 
-  - shift + left arrow on "SCHEDULED <2025-01-14>" -> decrements date by one day 
-  - space + mds on "* header" -> adds SCHEDULED for current date
-  - space + mdd on "* header" -> adds DEADLINE for current date
+  - ctrl + C                                        | opens calendar view
+  - Enter on a "- [ ]"                              | cycles its states of "-/x/ "
+  - ctrl + Enter on a "- [ ]"                       | adds a new empty [ ] at the line below with same indentation
+  - Enter on a "* TODO header"                      | marks it as done 
+  - ctrl + j                                        | go to next open "- [ ]"
+  - shift + j                                       | go to previous open "- [ ]"
+  - ctrl + h                                        | go to next "* header"
+  - shift + h                                       | go to previous "* header"
+  - space + msn                                     | narrows view to current "* header"
+  - space + msN                                     | disables narrow view 
+  - shift + right arrow on "SCHEDULED <2025-01-14>" | increments date by one day 
+  - shift + left arrow on "SCHEDULED <2025-01-14>"  | decrements date by one day 
+  - space + mds on "* header"                       | adds SCHEDULED for current date
+  - space + mdd on "* header"                       | adds DEADLINE for current date
 
 - Key shortcuts when in calendar 
   - are displayed in the top of calendar 
