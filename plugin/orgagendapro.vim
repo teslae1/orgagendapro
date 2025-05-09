@@ -755,7 +755,7 @@ function! GetDatesWithTypesFromLine(line)
   let line = a:line
   
   let date_types = ['DEADLINE', 'SCHEDULED']
-  let date_pattern = '<\(\d\{4}-\d\{2\}-\d\{2\}\)\s\+\w\{3\}\(\s\+\(\d\{1,2}:\d\{2\}\(-\d\{1,2}:\d\{2\}\)\?\)\)\?'
+  let date_pattern = '<\(\d\{4}-\d\{2\}-\d\{2\}\)\s\+\w\{2,3\}\(\s\+\(\d\{1,2}:\d\{2\}\(-\d\{1,2}:\d\{2\}\)\?\)\)\?'
   
   for date_type in date_types
     let start_pos = 0
