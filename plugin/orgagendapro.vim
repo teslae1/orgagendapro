@@ -528,9 +528,9 @@ function! s:PopulateOrgCalendar(mode, current_timestamp)
     call append(line_num, day_name . " " . ordered_prefix)
     let line_num += 1
 
-    if len(items_on_this_date) < 1
-      continue
-    endif
+    "if len(items_on_this_date) < 1
+    "  continue
+    "endif
     
     let formatted_lines = []
     let formatted_lines_with_time_sorted = {0:[],1:[],2:[],3:[],4:[],5:[],6:[],7:[],8:[],9:[],10:[],11:[],12:[],13:[],14:[],15:[],16:[],17:[],18:[],19:[],20:[],21:[],22:[],23:[]}
