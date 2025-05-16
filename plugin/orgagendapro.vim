@@ -1049,6 +1049,16 @@ function! s:OpenOrgFold()
     
     execute 'file orgfold'
     setlocal filetype=orgfold
+    
+    " Set up syntax highlighting for the orgfold buffer - improved patterns
+    syntax match OrgFoldHeader /^\*\+\s.*\ze\s\[\.\.\]$\|^\*\+\s.*\([^\.]\)$/
+    syntax match OrgFoldFoldDots /\[\.\.\]/ contained
+    syntax match OrgFoldFoldBracket /\[\|\]/ contained containedin=OrgFoldFoldDots
+    syntax match OrgFoldCollapsed /\s\[\.\.\]$/ contains=OrgFoldFoldDots
+    
+    highlight OrgFoldHeader gui=bold guifg=DarkOrange
+    highlight OrgFoldFoldDots gui=bold guifg=DarkOrange
+    highlight OrgFoldFoldBracket gui=bold guifg=Gray40
   endif
   
   " Always clear and repopulate
@@ -1088,6 +1098,22 @@ function! s:RerenderFolds()
   let response = s:RenderFolds(s:fold_structure, 0)
 endfunction
 
+function! s:OrgFoldEnter()
+  let current_line = line('.')
+  
+  if has_key(s:line_to_fold_map, current_line)
+    let fold = s:line_to_fold_map[current_line]
+    let target_line_nr = fold["lineNr"] + 1  " +1 because Vim line numbers start at 1 but indices start at 0
+    
+    " Close the orgfold buffer
+    bwipeout!
+    
+    " Navigate to the original file and position
+    execute "edit " . s:source_file
+    execute "normal! " . target_line_nr . "G"
+    normal! z.  " Center the view on the current line
+  endif
+endfunction
 
 command! -nargs=0 OrgFold call s:OpenOrgFold()
 nnoremap <S-tab> :OrgFold<CR>
