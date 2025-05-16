@@ -918,6 +918,126 @@ endfunction
 command! -nargs=0 OrgCal call s:OpenOrgCalendar('daily')
 nnoremap <C-c> :OrgCal<CR>
 
+function! s:RenderFolds(folds, current_line_nr)
+  let scoped_current_line_nr = a:current_line_nr
+  for fold in a:folds
+    let scoped_current_line_nr += 1
+    call append(scoped_current_line_nr, fold["headerText"])
+    if fold["isUnfolded"] == 0
+      continue
+    endif
+    let scoped_current_line_nr = s:RenderFolds(fold["children"], scoped_current_line_nr)
+  endfor
+  return scoped_current_line_nr
+endfunction
+
+function! s:PopulateOrgFold(source_filepath, source_line_nr, source_buffer_contents)
+  let folds = ExtractFoldsFromLines(a:source_buffer_contents, a:source_line_nr-1)
+  call s:RenderFolds(folds, 0)
+endfunction
+
+function! ExtractFoldsFromLines(source_buffer_contents, cursor_line_nr)
+  let headers_at_root = []
+  let current_level = 0
+  let line_nr = -1
+  let last_fold  = {}
+  for line in a:source_buffer_contents
+    let line_nr += 1
+    if len(line) == 0
+      continue
+    endif
+    if line[0] != '*'
+      continue
+    endif
+    let c = line[0]
+    let header_asterix_count = 0
+
+    while c == '*' && header_asterix_count < len(line)
+      let header_asterix_count += 1
+      let c = line[header_asterix_count]
+    endwhile
+  
+    let fold_obj = {
+    \ "headerText": line,
+    \ "asterixCount": header_asterix_count,
+    \ "lineNr": line_nr,
+    \ "children": [],
+    \ "parent": {},
+    \ "isCursorFocus": 0,
+    \ "isUnfolded": 0
+    \ }
+    let this_fold_matches_cursor_placement = line_nr == a:cursor_line_nr
+    let last_fold_matches_cursor_placement = line_nr > a:cursor_line_nr && empty(last_fold) == 0 && last_fold["lineNr"] <= a:cursor_line_nr 
+    if this_fold_matches_cursor_placement || last_fold_matches_cursor_placement
+      let curr = this_fold_matches_cursor_placement ? fold_obj : last_fold
+      let curr["isCursorFocus"] = 1
+      while empty(curr) == 0
+        let curr["isUnfolded"] = 1
+        let curr = curr["parent"]
+      endwhile
+    endif
+  
+    while empty(last_fold) == 0 && last_fold["asterixCount"] >= header_asterix_count 
+      let last_fold = last_fold["parent"]
+    endwhile
+  
+    if empty(last_fold) 
+      call add(headers_at_root, fold_obj)
+    else
+      let fold_obj["parent"] = last_fold
+      call add(last_fold["children"], fold_obj)
+    endif
+  
+    let last_fold = fold_obj
+  
+  endfor
+
+  return headers_at_root
+endfunction
+
+function! s:OpenOrgFold()
+  let s:source_file = expand('%:p')
+  let s:source_line = line('.')
+  let s:source_buffer_contents = getline(1, '$')
+  
+  let buf_nr = bufnr('orgfold')
+  let win_id = bufwinid(buf_nr)
+  let buffer_already_exists = buf_nr > 0
+  let window_is_open_in_editor = win_id != -1
+  
+  if buffer_already_exists && window_is_open_in_editor
+    call win_gotoid(win_id)
+  elseif buffer_already_exists
+    execute 'buffer ' . buf_nr
+  else
+    enew
+    setlocal buftype=nofile
+    setlocal bufhidden=hide
+    setlocal noswapfile
+    setlocal nobuflisted
+    setlocal nowrap
+    setlocal nonumber
+    setlocal nofoldenable
+    
+    execute 'file orgfold'
+    setlocal filetype=orgfold
+  endif
+  
+  " Always clear and repopulate
+  setlocal modifiable
+  silent! normal! ggdG
+  
+  call s:PopulateOrgFold(s:source_file, s:source_line, s:source_buffer_contents)
+  
+  nnoremap <buffer> <CR> :call <SID>OrgFoldEnter()<CR>
+  nnoremap <buffer> q :bwipeout!<CR>
+  
+  setlocal nomodifiable
+endfunction
+
+command! -nargs=0 OrgFold call s:OpenOrgFold()
+nnoremap <S-tab> :OrgFold<CR>
+
 " Generate help tags
 let s:path = fnamemodify(resolve(expand('<sfile>:p')), ':h:h')
 execute 'helptags ' . s:path . '/doc'
