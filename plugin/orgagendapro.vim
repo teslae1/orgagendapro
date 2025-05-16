@@ -918,6 +918,206 @@ endfunction
 command! -nargs=0 OrgCal call s:OpenOrgCalendar('daily')
 nnoremap <C-c> :OrgCal<CR>
 
+let s:fold_structure = []
+let s:line_to_fold_map = {}
+
+function! s:RenderFolds(folds, current_line_nr)
+  let scoped_current_line_nr = a:current_line_nr
+  let line_to_put_cursor = -1
+  for fold in a:folds
+    let scoped_current_line_nr += 1
+    let isUnfolded = fold["isUnfolded"]
+    let children = fold["children"]
+    let should_display_dots = isUnfolded == 0 && len(children) > 0
+    let text = fold["headerText"]
+    if should_display_dots
+      let text = text . " [..]"
+    endif
+    call append(scoped_current_line_nr, text)
+    
+    " Store mapping from line number to fold object
+    let s:line_to_fold_map[scoped_current_line_nr + 1] = fold
+    
+    if fold["isCursorFocus"] == 1
+      let line_to_put_cursor = scoped_current_line_nr
+    endif
+    if isUnfolded == 0
+      continue
+    endif
+    let response = s:RenderFolds(children, scoped_current_line_nr)
+    let scoped_current_line_nr = response["updatedCurrentLineNr"]
+    if response["lineToPutCursor"] > -1
+      let line_to_put_cursor = response["lineToPutCursor"]
+    endif
+  endfor
+  return { "updatedCurrentLineNr": scoped_current_line_nr, "lineToPutCursor": line_to_put_cursor }
+endfunction
+
+function! s:PopulateOrgFold(source_filepath, source_line_nr, source_buffer_contents)
+  let s:line_to_fold_map = {}  " Reset the mapping
+  let s:fold_structure = ExtractFoldsFromLines(a:source_buffer_contents, a:source_line_nr-1)
+  
+  let response = s:RenderFolds(s:fold_structure, 0)
+  let line_to_put_cursor = response["lineToPutCursor"]
+  normal! gg
+  execute "normal! " . line_to_put_cursor . "j"
+endfunction
+
+function! ExtractFoldsFromLines(source_buffer_contents, cursor_line_nr)
+  let headers_at_root = []
+  let current_level = 0
+  let line_nr = -1
+  let last_fold  = {}
+  for line in a:source_buffer_contents
+    let line_nr += 1
+    if len(line) == 0
+      continue
+    endif
+    if line[0] != '*'
+      continue
+    endif
+    let c = line[0]
+    let header_asterix_count = 0
+
+    while c == '*' && header_asterix_count < len(line)
+      let header_asterix_count += 1
+      let c = line[header_asterix_count]
+    endwhile
+  
+    let fold_obj = {
+    \ "headerText": line,
+    \ "asterixCount": header_asterix_count,
+    \ "lineNr": line_nr,
+    \ "children": [],
+    \ "parent": {},
+    \ "isCursorFocus": 0,
+    \ "isUnfolded": 0
+    \ }
+    let this_fold_matches_cursor_placement = line_nr == a:cursor_line_nr
+    let last_fold_matches_cursor_placement = line_nr > a:cursor_line_nr && empty(last_fold) == 0 && last_fold["lineNr"] <= a:cursor_line_nr 
+    if this_fold_matches_cursor_placement || last_fold_matches_cursor_placement
+      let curr = this_fold_matches_cursor_placement ? fold_obj : last_fold
+      let curr["isCursorFocus"] = 1
+      let curr = curr["parent"]
+      while empty(curr) == 0
+        let curr["isUnfolded"] = 1
+        let curr = curr["parent"]
+      endwhile
+    endif
+  
+    while empty(last_fold) == 0 && last_fold["asterixCount"] >= header_asterix_count 
+      let last_fold = last_fold["parent"]
+    endwhile
+  
+    if empty(last_fold) 
+      call add(headers_at_root, fold_obj)
+    else
+      let fold_obj["parent"] = last_fold
+      call add(last_fold["children"], fold_obj)
+    endif
+  
+    let last_fold = fold_obj
+  
+  endfor
+
+  return headers_at_root
+endfunction
+
+function! s:OpenOrgFold()
+  let s:source_file = expand('%:p')
+  let s:source_line = line('.')
+  let s:source_buffer_contents = getline(1, '$')
+  
+  let buf_nr = bufnr('orgfold')
+  let win_id = bufwinid(buf_nr)
+  let buffer_already_exists = buf_nr > 0
+  let window_is_open_in_editor = win_id != -1
+  
+  if buffer_already_exists && window_is_open_in_editor
+    call win_gotoid(win_id)
+  elseif buffer_already_exists
+    execute 'buffer ' . buf_nr
+  else
+    enew
+    setlocal buftype=nofile
+    setlocal bufhidden=hide
+    setlocal noswapfile
+    setlocal nobuflisted
+    setlocal nowrap
+    setlocal nonumber
+    setlocal nofoldenable
+    
+    execute 'file orgfold'
+    setlocal filetype=orgfold
+    
+    " Set up syntax highlighting for the orgfold buffer - improved patterns
+    syntax match OrgFoldHeader /^\*\+\s.*\ze\s\[\.\.\]$\|^\*\+\s.*\([^\.]\)$/
+    syntax match OrgFoldFoldDots /\[\.\.\]/ contained
+    syntax match OrgFoldFoldBracket /\[\|\]/ contained containedin=OrgFoldFoldDots
+    syntax match OrgFoldCollapsed /\s\[\.\.\]$/ contains=OrgFoldFoldDots
+    
+    highlight OrgFoldHeader gui=bold guifg=DarkOrange
+    highlight OrgFoldFoldDots gui=bold guifg=DarkOrange
+    highlight OrgFoldFoldBracket gui=bold guifg=Gray40
+  endif
+  
+  " Always clear and repopulate
+  setlocal modifiable
+  silent! normal! ggdG
+  
+  call s:PopulateOrgFold(s:source_file, s:source_line, s:source_buffer_contents)
+  
+  nnoremap <buffer> <CR> :call <SID>OrgFoldEnter()<CR>
+  nnoremap <buffer> <Tab> :call <SID>OrgFoldToggle()<CR>
+  nnoremap <buffer> q :bwipeout!<CR>
+  
+  setlocal nomodifiable
+endfunction
+
+function! s:OrgFoldToggle()
+  let current_line = line('.')
+  if has_key(s:line_to_fold_map, current_line)
+    let fold = s:line_to_fold_map[current_line]
+    " Toggle the fold state
+    let fold["isUnfolded"] = !fold["isUnfolded"]
+    
+    " Redraw the buffer with updated fold state
+    setlocal modifiable
+    silent! normal! ggdG
+    call s:RerenderFolds()
+    setlocal nomodifiable
+    
+    " Return to the same line position
+    execute "normal! " . current_line . "G"
+  endif
+endfunction
+
+function! s:RerenderFolds()
+  " Clear the line mapping before rerendering
+  let s:line_to_fold_map = {}
+  let response = s:RenderFolds(s:fold_structure, 0)
+endfunction
+
+function! s:OrgFoldEnter()
+  let current_line = line('.')
+  
+  if has_key(s:line_to_fold_map, current_line)
+    let fold = s:line_to_fold_map[current_line]
+    let target_line_nr = fold["lineNr"] + 1  " +1 because Vim line numbers start at 1 but indices start at 0
+    
+    " Close the orgfold buffer
+    bwipeout!
+    
+    " Navigate to the original file and position
+    execute "edit " . s:source_file
+    execute "normal! " . target_line_nr . "G"
+    normal! z.  " Center the view on the current line
+  endif
+endfunction
+
+command! -nargs=0 OrgFold call s:OpenOrgFold()
+nnoremap <S-tab> :OrgFold<CR>
+
 " Generate help tags
 let s:path = fnamemodify(resolve(expand('<sfile>:p')), ':h:h')
 execute 'helptags ' . s:path . '/doc'
