@@ -918,6 +918,9 @@ endfunction
 command! -nargs=0 OrgCal call s:OpenOrgCalendar('daily')
 nnoremap <C-c> :OrgCal<CR>
 
+let s:fold_structure = []
+let s:line_to_fold_map = {}
+
 function! s:RenderFolds(folds, current_line_nr)
   let scoped_current_line_nr = a:current_line_nr
   let line_to_put_cursor = -1
@@ -931,6 +934,10 @@ function! s:RenderFolds(folds, current_line_nr)
       let text = text . " [..]"
     endif
     call append(scoped_current_line_nr, text)
+    
+    " Store mapping from line number to fold object
+    let s:line_to_fold_map[scoped_current_line_nr + 1] = fold
+    
     if fold["isCursorFocus"] == 1
       let line_to_put_cursor = scoped_current_line_nr
     endif
@@ -947,12 +954,13 @@ function! s:RenderFolds(folds, current_line_nr)
 endfunction
 
 function! s:PopulateOrgFold(source_filepath, source_line_nr, source_buffer_contents)
-  let folds = ExtractFoldsFromLines(a:source_buffer_contents, a:source_line_nr-1)
-  let response = s:RenderFolds(folds, 0)
+  let s:line_to_fold_map = {}  " Reset the mapping
+  let s:fold_structure = ExtractFoldsFromLines(a:source_buffer_contents, a:source_line_nr-1)
+  
+  let response = s:RenderFolds(s:fold_structure, 0)
   let line_to_put_cursor = response["lineToPutCursor"]
   normal! gg
   execute "normal! " . line_to_put_cursor . "j"
-
 endfunction
 
 function! ExtractFoldsFromLines(source_buffer_contents, cursor_line_nr)
@@ -1050,10 +1058,36 @@ function! s:OpenOrgFold()
   call s:PopulateOrgFold(s:source_file, s:source_line, s:source_buffer_contents)
   
   nnoremap <buffer> <CR> :call <SID>OrgFoldEnter()<CR>
+  nnoremap <buffer> <Tab> :call <SID>OrgFoldToggle()<CR>
   nnoremap <buffer> q :bwipeout!<CR>
   
   setlocal nomodifiable
 endfunction
+
+function! s:OrgFoldToggle()
+  let current_line = line('.')
+  if has_key(s:line_to_fold_map, current_line)
+    let fold = s:line_to_fold_map[current_line]
+    " Toggle the fold state
+    let fold["isUnfolded"] = !fold["isUnfolded"]
+    
+    " Redraw the buffer with updated fold state
+    setlocal modifiable
+    silent! normal! ggdG
+    call s:RerenderFolds()
+    setlocal nomodifiable
+    
+    " Return to the same line position
+    execute "normal! " . current_line . "G"
+  endif
+endfunction
+
+function! s:RerenderFolds()
+  " Clear the line mapping before rerendering
+  let s:line_to_fold_map = {}
+  let response = s:RenderFolds(s:fold_structure, 0)
+endfunction
+
 
 command! -nargs=0 OrgFold call s:OpenOrgFold()
 nnoremap <S-tab> :OrgFold<CR>
