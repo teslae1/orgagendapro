@@ -920,20 +920,39 @@ nnoremap <C-c> :OrgCal<CR>
 
 function! s:RenderFolds(folds, current_line_nr)
   let scoped_current_line_nr = a:current_line_nr
+  let line_to_put_cursor = -1
   for fold in a:folds
     let scoped_current_line_nr += 1
-    call append(scoped_current_line_nr, fold["headerText"])
-    if fold["isUnfolded"] == 0
+    let isUnfolded = fold["isUnfolded"]
+    let children = fold["children"]
+    let should_display_dots = isUnfolded == 0 && len(children) > 0
+    let text = fold["headerText"]
+    if should_display_dots
+      let text = text . " [..]"
+    endif
+    call append(scoped_current_line_nr, text)
+    if fold["isCursorFocus"] == 1
+      let line_to_put_cursor = scoped_current_line_nr
+    endif
+    if isUnfolded == 0
       continue
     endif
-    let scoped_current_line_nr = s:RenderFolds(fold["children"], scoped_current_line_nr)
+    let response = s:RenderFolds(children, scoped_current_line_nr)
+    let scoped_current_line_nr = response["updatedCurrentLineNr"]
+    if response["lineToPutCursor"] > -1
+      let line_to_put_cursor = response["lineToPutCursor"]
+    endif
   endfor
-  return scoped_current_line_nr
+  return { "updatedCurrentLineNr": scoped_current_line_nr, "lineToPutCursor": line_to_put_cursor }
 endfunction
 
 function! s:PopulateOrgFold(source_filepath, source_line_nr, source_buffer_contents)
   let folds = ExtractFoldsFromLines(a:source_buffer_contents, a:source_line_nr-1)
-  call s:RenderFolds(folds, 0)
+  let response = s:RenderFolds(folds, 0)
+  let line_to_put_cursor = response["lineToPutCursor"]
+  normal! gg
+  execute "normal! " . line_to_put_cursor . "j"
+
 endfunction
 
 function! ExtractFoldsFromLines(source_buffer_contents, cursor_line_nr)
@@ -971,6 +990,7 @@ function! ExtractFoldsFromLines(source_buffer_contents, cursor_line_nr)
     if this_fold_matches_cursor_placement || last_fold_matches_cursor_placement
       let curr = this_fold_matches_cursor_placement ? fold_obj : last_fold
       let curr["isCursorFocus"] = 1
+      let curr = curr["parent"]
       while empty(curr) == 0
         let curr["isUnfolded"] = 1
         let curr = curr["parent"]
