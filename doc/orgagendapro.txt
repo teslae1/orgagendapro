@@ -23,24 +23,15 @@ let g:orgcal_filepaths = ['C:\my\org\file1.org', 'C:\my\org\file2.org']
   - space + mdd on "* header"                       | adds DEADLINE for current date
   - shift + tab                                     | opens orgfold at the current header
 
+- Command when in ".org" files
+- :OrgState                                         | opens orgstate view with PROJ as state
+- :OrgState WAIT                                    | opens orgstate view with the first argument as state (in this example would be WAIT)
+
 - Key shortcuts when in calendar 
-  - are displayed in the top of calendar 
-
-*orgfold*
-
-OrgFold provides a hierarchical view of headings in your org files, allowing you
-to navigate and explore the structure more easily.
-
-- Key shortcuts when in OrgFold view:
-  - Tab                           | Toggle fold/unfold for the heading under cursor
-  - Enter                         | Jump back to the heading in the original org file
-  - q                             | Close the OrgFold view
-
-- To open the OrgFold view from any org file:
-  - Shift + Tab                   | Opens OrgFold at current position
-
-OrgFold opens with the cursor positioned on your current heading, with parent
-headings automatically expanded. Collapsed sections with children are shown with
-a [..] indicator.
+  - are displayed in the top 
+- Key shortcuts when in orgfold
+  - are displayed in the top 
+- Key shortcuts when in orgstate 
+  - are displayed in the top 
 
 vim:tw=78:ts=8:ft=help:norl:

@@ -957,7 +957,8 @@ function! s:PopulateOrgFold(source_filepath, source_line_nr, source_buffer_conte
   let s:line_to_fold_map = {}  " Reset the mapping
   let s:fold_structure = ExtractFoldsFromLines(a:source_buffer_contents, a:source_line_nr-1)
   
-  let response = s:RenderFolds(s:fold_structure, 0)
+  " Start rendering from line 6 (after the header)
+  let response = s:RenderFolds(s:fold_structure, 6)
   let line_to_put_cursor = response["lineToPutCursor"]
   normal! gg
   execute "normal! " . line_to_put_cursor . "j"
@@ -1065,6 +1066,14 @@ function! s:OpenOrgFold()
   setlocal modifiable
   silent! normal! ggdG
   
+  " Add header with key shortcuts
+  call append(0, "=============================================================================================")
+  call append(1, "OrgFold View")
+  call append(2, "Press <Enter> on an entry to go to its location")
+  call append(3, "Press <Tab> to expand/collapse a section")
+  call append(4, "Press 'q' to close")
+  call append(5, "=============================================================================================")
+  
   call s:PopulateOrgFold(s:source_file, s:source_line, s:source_buffer_contents)
   
   nnoremap <buffer> <CR> :call <SID>OrgFoldEnter()<CR>
@@ -1146,6 +1155,152 @@ augroup END
 
 command! -nargs=0 OrgFold call s:OpenOrgFold()
 nnoremap <S-tab> :OrgFold<CR>
+
+augroup OrgStateHighlight
+  autocmd!
+  autocmd BufNewFile,BufRead orgstate setfiletype orgstate
+  autocmd FileType orgstate syntax match OrgStateHeader /^\*.*$/
+  autocmd FileType orgstate syntax match OrgStateTodo /TODO/
+  autocmd FileType orgstate syntax match OrgStateProjTag /PROJ/
+  autocmd FileType orgstate syntax match OrgStateHighPriority /\[#[A-C]\]/
+  autocmd FileType orgstate syntax match OrgStateMediumPriority /\[#[D-E]\]/
+  autocmd FileType orgstate syntax match OrgStateLowPriority /\[#[F-G]\]/
+  autocmd FileType orgstate syntax match OrgStateHiddenMeta /‡.\{-}‡/ conceal
+  
+  autocmd FileType orgstate highlight OrgStateHeader ctermfg=Yellow guifg=#ffff00 gui=bold
+  autocmd FileType orgstate highlight OrgStateTodo guifg=DarkOrange gui=bold
+  autocmd FileType orgstate highlight OrgStateProjTag guifg=DarkOrange gui=bold
+  autocmd FileType orgstate highlight OrgStateHighPriority ctermfg=Red guifg=#ff6666 gui=bold
+  autocmd FileType orgstate highlight OrgStateMediumPriority ctermfg=Yellow guifg=#ffff66 gui=bold
+  autocmd FileType orgstate highlight OrgStateLowPriority ctermfg=Green guifg=#66ff66 gui=bold
+  
+  autocmd FileType orgstate highlight link OrgStateHiddenMeta Conceal
+  
+  autocmd FileType orgstate setlocal conceallevel=2
+  autocmd FileType orgstate setlocal concealcursor=nvic
+augroup END
+
+function! s:PopulateOrgState(state)
+  silent! normal! ggdG
+  
+  if exists('g:orgcal_filepaths') == 0 
+    echo "Cannot populate state view: expected variable g:orgcal_filepaths to exist"
+    return
+  endif
+  if empty(g:orgcal_filepaths)
+    echo "Cannot populate state view: expected variable g:orgcal_filepaths to not be empty"
+    return
+  endif
+  
+  let headers_with_state = []
+  
+  for org_file in g:orgcal_filepaths
+    let file_lines = readfile(org_file)
+    let org_file_name = fnamemodify(org_file, ":t")
+    
+    let line_num = 0
+    for line in file_lines
+      let line_num += 1
+      
+      " Check if line starts with * and contains the state
+      if line =~# '^\*\+\s' && line =~# '^\*\+\s\+' . a:state
+        call add(headers_with_state, {
+          \ "headerText": line,
+          \ "filePath": org_file,
+          \ "fileName": org_file_name,
+          \ "lineNum": line_num,
+          \ "priority": s:ExtractPriority(line)
+        \ })
+      endif
+    endfor
+  endfor
+  
+  " Sort headers by priority
+  call sort(headers_with_state, function('s:ComparePriority'))
+  
+  " Display headers
+  call append(0, "=============================================================================================")
+  call append(1, "State: " . a:state)
+  call append(2, "Press <Enter> on an entry to go to its file location")
+  call append(3, "Press 'q' to close")
+  call append(4, "=============================================================================================")
+  
+  let line_num = 5
+  for header in headers_with_state
+    let display_line = header["fileName"] . ": " . header["headerText"] . " " . s:OrgCalHiddenMeta(header["filePath"] . "|" . header["lineNum"])
+    call append(line_num, display_line)
+    let line_num += 1
+  endfor
+endfunction
+
+function! s:ExtractPriority(line)
+  let priority_match = matchlist(a:line, '\[#\([A-G]\)\]')
+  if len(priority_match) > 1
+    return priority_match[1]
+  endif
+  return "Z"  " Default lowest priority
+endfunction
+
+function! s:ComparePriority(i1, i2)
+  return a:i1["priority"] == a:i2["priority"] ? 0 : a:i1["priority"] > a:i2["priority"] ? 1 : -1
+endfunction
+
+function! s:OrgStateOpenEntry()
+  let line = getline('.')
+  
+  let meta_pattern = '‡\(.\{-}\)‡'
+  let matches = matchlist(line, meta_pattern)
+  
+  if len(matches) > 1
+    let file_info = split(matches[1], '|')
+    if len(file_info) >= 2
+      let file_path = file_info[0]
+      let line_number = file_info[1]
+      
+      execute 'edit +' . line_number . ' ' . file_path
+    endif
+  endif
+endfunction
+
+function! s:OpenOrgState(...)
+  let state = a:0 > 0 ? a:1 : "PROJ"
+  
+  let buf_nr = bufnr('orgstate')
+  let win_id = bufwinid(buf_nr)
+  let buffer_already_exists = buf_nr > 0
+  let window_is_open_in_editor = win_id != -1
+  
+  if buffer_already_exists && window_is_open_in_editor
+    call win_gotoid(win_id)
+  elseif buffer_already_exists
+    execute 'buffer ' . buf_nr
+  else
+    enew
+    setlocal buftype=nofile
+    setlocal bufhidden=hide
+    setlocal noswapfile
+    setlocal nobuflisted
+    setlocal nowrap
+    setlocal nonumber
+    setlocal nofoldenable
+    
+    execute 'file orgstate'
+    setlocal filetype=orgstate
+  endif
+  
+  setlocal modifiable
+  call s:PopulateOrgState(state)
+  
+  nnoremap <buffer> <CR> :call <SID>OrgStateOpenEntry()<CR>
+  nnoremap <buffer> q :bwipeout!<CR>
+  
+  setlocal nomodifiable
+  
+  " Position cursor at the first entry
+  normal! 6G
+endfunction
+
+command! -nargs=? OrgState call s:OpenOrgState(<f-args>)
 
 " Generate help tags
 let s:path = fnamemodify(resolve(expand('<sfile>:p')), ':h:h')
