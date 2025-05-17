@@ -180,12 +180,12 @@ endfunction
 autocmd FileType org nnoremap <buffer> <C-CR> :call HandleOrgCtrlEnterKey()<CR>
 
 function! SearchForwardOpenChecklistItem()
-  call SearchForward('\[ \]')
+  call SearchForward('\(- \[ \]\|- \[-\]\)')
 endfunction
 autocmd FileType org nnoremap <buffer> <C-j> :call SearchForwardOpenChecklistItem()<CR>
 
 function! SearchBackOpenChecklistItem()
-  call SearchBackward('\[ \]')
+  call SearchBackward('\(- \[ \]\|- \[-\]\)')
 endfunction
 autocmd FileType org nnoremap <buffer> <S-j> :call SearchBackOpenChecklistItem()<CR>
 
@@ -1092,6 +1092,29 @@ function! s:OrgFoldToggle()
   endif
 endfunction
 
+function! s:ShowParentStructure()
+  let current_line = line('.')
+  if has_key(s:line_to_fold_map, current_line)
+    let fold = s:line_to_fold_map[current_line]
+    let hierarchy = []
+    
+    " Add the current fold's header text
+    let header_text = substitute(fold["headerText"], '^\*\+\s\+', '', '')
+    call add(hierarchy, header_text)
+    
+    " Add all parents
+    let parent = fold["parent"]
+    while !empty(parent)
+      let parent_text = substitute(parent["headerText"], '^\*\+\s\+', '', '')
+      call insert(hierarchy, parent_text)
+      let parent = parent["parent"]
+    endwhile
+    
+    " Display the hierarchy in the command line
+    echo join(hierarchy, ' / ')
+  endif
+endfunction
+
 function! s:RerenderFolds()
   " Clear the line mapping before rerendering
   let s:line_to_fold_map = {}
@@ -1114,6 +1137,12 @@ function! s:OrgFoldEnter()
     normal! z.  " Center the view on the current line
   endif
 endfunction
+
+" Add autocmd to show parent structure when cursor moves in orgfold buffer
+augroup OrgFoldParentStructure
+  autocmd!
+  autocmd CursorMoved orgfold call s:ShowParentStructure()
+augroup END
 
 command! -nargs=0 OrgFold call s:OpenOrgFold()
 nnoremap <S-tab> :OrgFold<CR>
