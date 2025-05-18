@@ -158,26 +158,48 @@ function! HandleOrgEnterKey()
 endfunction
 autocmd FileType org nnoremap <buffer> <CR> :call HandleOrgEnterKey()<CR>
 
-function! HandleOrgCtrlEnterKey()
-  let line = getline('.')
-  let checkbox_pattern = '^\(\s*\)- \[\s*[X ]\s*\]'
-  
-  if match(line, checkbox_pattern) >= 0
-    let indentation = matchstr(line, '^\s*')
-    
-    let new_line = indentation . '- [ ] '
-    
-    call append(line('.'), new_line)
-    
-    normal! j$
-    startinsert!
+function! LineIsOrgCheckbox(line)
+  return match(a:line, '^\(\s*\)- \[\s*[X -]\s*\]') >= 0
+endfunction
 
-    return
+function! AddNewItemAtBelowLine()
+  let line = getline('.')
+  if LineIsOrgCheckbox(line) == 0
+    execute "normal! o"
+    return 
   endif
   
-  execute "normal! o"
+  let indentation = matchstr(line, '^\s*')
+  
+  let new_line = indentation . '- [ ] '
+  
+  call append(line('.'), new_line)
+  
+  normal! j$
+  startinsert!
+
 endfunction
-autocmd FileType org nnoremap <buffer> <C-CR> :call HandleOrgCtrlEnterKey()<CR>
+
+function! AddNewItemAtAboveLine()
+  let line = getline('.')
+  if LineIsOrgCheckbox(line) == 0
+    execute "normal! o"
+    return 
+  endif
+  
+  let indentation = matchstr(line, '^\s*')
+  
+  let new_line = indentation . '- [ ] '
+  
+  call append(line('.') - 1, new_line)
+  
+  normal! k$
+  startinsert!
+
+endfunction
+
+autocmd FileType org nnoremap <buffer> <C-CR> :call AddNewItemAtBelowLine()<CR>
+autocmd FileType org nnoremap <buffer> <C-S-CR> :call AddNewItemAtAboveLine()<CR>
 
 function! SearchForwardOpenChecklistItem()
   call SearchForward('\(- \[ \]\|- \[-\]\)')
