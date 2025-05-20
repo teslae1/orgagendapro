@@ -13,6 +13,10 @@ augroup OrgHighlights
   autocmd FileType org syntax match OrgDoneHeader /^\*\+\s\+DONE\s.*$/
   autocmd FileType org highlight OrgDoneHeader ctermfg=DarkGray guifg=Gray40 term=bold cterm=bold gui=bold
 
+  " Add priority pattern and highlight
+  autocmd FileType org syntax match OrgPriority /\[#[A-N]\]/ containedin=OrgHeader,OrgDoneHeader
+  autocmd FileType org highlight OrgPriority guifg=DarkGreen gui=bold
+  
   autocmd FileType org syntax match OrgScheduled /SCHEDULED:/
   if exists('g:org_highlight_foreground') && g:org_highlight_foreground != ''
     autocmd FileType org execute "highlight OrgScheduled term=bold cterm=bold gui=bold guifg=" . g:org_highlight_foreground
@@ -503,6 +507,8 @@ augroup OrgCalHighlight
   autocmd FileType orgcal syntax match OrgCalDeadline /DEADLINE/
   autocmd FileType orgcal syntax match OrgCalDate /<\d\{4}-\d\{2}-\d\{2}.*>/
   autocmd FileType orgcal syntax match OrgCalHiddenMeta /‡.\{-}‡/ conceal
+  " Add priority pattern
+  autocmd FileType orgcal syntax match OrgCalPriority /\[#[A-N]\]/
   
   autocmd FileType orgcal highlight OrgCalTitle ctermfg=Yellow guifg=#ffff00 gui=bold
   autocmd FileType orgcal highlight OrgCalTodo guifg=DarkOrange gui=bold
@@ -510,6 +516,8 @@ augroup OrgCalHighlight
   autocmd FileType orgcal highlight OrgCalScheduled ctermfg=Cyan guifg=#6666ff gui=bold
   autocmd FileType orgcal highlight OrgCalDeadline  gui=bold
   autocmd FileType orgcal highlight OrgCalDate ctermfg=Blue guifg=#6699ff
+  " Add priority highlighting
+  autocmd FileType orgcal highlight OrgCalPriority guifg=DarkGreen gui=bold
   autocmd FileType orgcal highlight link OrgCalHiddenMeta Conceal
   
   autocmd FileType orgcal setlocal conceallevel=2
@@ -641,15 +649,20 @@ function! s:PopulateOrgCalendar(mode, current_timestamp)
         let upcoming_days_deadline = potential_upcoming_deadline_item["upcomingDeadlineDays"]
         if upcoming_days_deadline > 0
           let formatted_line = "  " . potential_upcoming_deadline_item["orgFileName"] . " In " . upcoming_days_deadline . " d.: " . " " . potential_upcoming_deadline_item["headerText"] . " " . potential_upcoming_deadline_item["hiddenMetaLink"]
-          call add(upcoming_day_lines_map[upcoming_days_deadline], formatted_line)
+          call add(upcoming_day_lines_map[upcoming_days_deadline], {
+            \ "line": formatted_line,
+            \ "priority": potential_upcoming_deadline_item["priority"]
+            \ })
         endif
       endfor
     endif
 
     for i in range(upcoming_deadline_days_in_future)
       let lines = upcoming_day_lines_map[i+1]
-      for line in lines
-        call append(line_num, line)
+      " Sort by priority
+      call sort(lines, function('s:ComparePriority'))
+      for item in lines
+        call append(line_num, item["line"])
         let line_num += 1
       endfor
     endfor
@@ -744,12 +757,16 @@ function! ExtractHeadersWithDatesFromLines(lines, date_str_prefixes_to_load_into
     let headline = GetOrgHeaderTextFromLine(line)
     let header_line_col = i + 1  
 
+    " Extract priority
+    let priority = s:ExtractPriority(line)
+    
     let headerDate = {
       \ "headerText": headline,
       \ "dates": dates_with_types_within_range,
       \ "hiddenMetaLink": s:OrgCalHiddenMeta(a:org_file . "|" . header_line_col),
       \ "orgFileName": a:org_file_name,
-      \ "upcomingDeadlineDays": upcoming_deadline_days_in_future
+      \ "upcomingDeadlineDays": upcoming_deadline_days_in_future,
+      \ "priority": priority
       \ }
     call add(response, headerDate)
   endfor
@@ -1234,16 +1251,15 @@ augroup OrgStateHighlight
   autocmd FileType orgstate syntax match OrgStateTodo /TODO/
   autocmd FileType orgstate syntax match OrgStateProjTag /PROJ/
   autocmd FileType orgstate syntax match OrgStateHighPriority /\[#[A-C]\]/
-  autocmd FileType orgstate syntax match OrgStateMediumPriority /\[#[D-E]\]/
-  autocmd FileType orgstate syntax match OrgStateLowPriority /\[#[F-G]\]/
+  autocmd FileType orgstate syntax match OrgStateMediumPriority /\[#[D-H]\]/
+  autocmd FileType orgstate syntax match OrgStateLowPriority /\[#[I-N]\]/
   autocmd FileType orgstate syntax match OrgStateHiddenMeta /‡.\{-}‡/ conceal
   
   autocmd FileType orgstate highlight OrgStateHeader ctermfg=Yellow guifg=#ffff00 gui=bold
   autocmd FileType orgstate highlight OrgStateTodo guifg=DarkOrange gui=bold
   autocmd FileType orgstate highlight OrgStateProjTag guifg=DarkOrange gui=bold
-  autocmd FileType orgstate highlight OrgStateHighPriority ctermfg=Red guifg=#ff6666 gui=bold
-  autocmd FileType orgstate highlight OrgStateMediumPriority ctermfg=Yellow guifg=#ffff66 gui=bold
-  autocmd FileType orgstate highlight OrgStateLowPriority ctermfg=Green guifg=#66ff66 gui=bold
+  autocmd FileType orgstate syntax match OrgStatePriority /\[#[A-N]\]/ containedin=OrgStateHighPriority,OrgStateMediumPriority,OrgStateLowPriority
+  autocmd FileType orgstate highlight OrgStatePriority guifg=DarkGreen gui=bold
   
   autocmd FileType orgstate highlight link OrgStateHiddenMeta Conceal
   
@@ -1305,7 +1321,7 @@ function! s:PopulateOrgState(state)
 endfunction
 
 function! s:ExtractPriority(line)
-  let priority_match = matchlist(a:line, '\[#\([A-G]\)\]')
+  let priority_match = matchlist(a:line, '\[#\([A-N]\)\]')
   if len(priority_match) > 1
     return priority_match[1]
   endif
@@ -1376,3 +1392,75 @@ command! -nargs=? OrgState call s:OpenOrgState(<f-args>)
 " Generate help tags
 let s:path = fnamemodify(resolve(expand('<sfile>:p')), ':h:h')
 execute 'helptags ' . s:path . '/doc'
+
+" Add after the file's existing functions
+
+function! GetPriorityFromLine(line)
+  let priority_match = matchlist(a:line, '\[#\([A-N]\)\]')
+  if len(priority_match) > 1
+    return priority_match[1]
+  endif
+  return ""
+endfunction
+
+function! ShiftPriority(direction)
+  let line = getline('.')
+  if !LineIsOrgHeader(line)
+    echo "Not on a header line"
+    return
+  endif
+  
+  let current_priority = GetPriorityFromLine(line)
+  let new_priority = ""
+  
+  if current_priority == ""
+    " No priority exists yet
+    if a:direction == "up"
+      let new_priority = "A"
+    else
+      let new_priority = "N"
+    endif
+  else
+    " Priority exists, shift it
+    let ascii_val = char2nr(current_priority)
+    if a:direction == "up"
+      " Shift up (A is highest, so decrease ASCII value)
+      if ascii_val > 65  " 'A' in ASCII
+        let new_priority = nr2char(ascii_val - 1)
+      else
+        let new_priority = "A"  " Already at highest
+      endif
+    else
+      " Shift down (increase ASCII value)
+      if ascii_val < 78  " 'N' in ASCII
+        let new_priority = nr2char(ascii_val + 1)
+      else
+        let new_priority = "N"  " Already at lowest
+      endif
+    endif
+  endif
+  
+  " Apply the new priority
+  if current_priority == ""
+    " Insert new priority after TODO/DONE/etc word
+    let pattern = '^\(\*\+\s\+\w\+\s\+\)'
+    let replacement = '\1[#' . new_priority . '] '
+    let new_line = substitute(line, pattern, replacement, '')
+    
+    " If no state (TODO/DONE) exists, insert after stars
+    if new_line == line
+      let pattern = '^\(\*\+\s\+\)'
+      let replacement = '\1[#' . new_priority . '] '
+      let new_line = substitute(line, pattern, replacement, '')
+    endif
+  else
+    " Replace existing priority
+    let new_line = substitute(line, '\[#' . current_priority . '\]', '[#' . new_priority . ']', '')
+  endif
+  
+  call setline('.', new_line)
+endfunction
+
+" Add key mappings for priority shifting
+autocmd FileType org nnoremap <buffer> <S-Up> :call ShiftPriority("up")<CR>
+autocmd FileType org nnoremap <buffer> <S-Down> :call ShiftPriority("down")<CR>
