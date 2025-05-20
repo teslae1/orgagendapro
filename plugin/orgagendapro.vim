@@ -606,7 +606,10 @@ function! s:PopulateOrgCalendar(mode, current_timestamp)
     "endif
     
     let formatted_lines = []
-    let formatted_lines_with_time_sorted = {0:[],1:[],2:[],3:[],4:[],5:[],6:[],7:[],8:[],9:[],10:[],11:[],12:[],13:[],14:[],15:[],16:[],17:[],18:[],19:[],20:[],21:[],22:[],23:[]}
+    let formatted_lines_with_time_sorted = {}
+    for i in range(24*60)  " Create slots for each minute of the day
+      let formatted_lines_with_time_sorted[i] = []
+    endfor
     let formatted_lines_upcoming_deadline = []
     for h in items_on_this_date
       for date in h["dates"]
@@ -615,18 +618,25 @@ function! s:PopulateOrgCalendar(mode, current_timestamp)
        endif
        let time_str = get(date, "timeStr", "")
        if time_str != ""
-         let hour_int = str2nr(matchstr(time_str, '^\d\{1,2}'))
-         let formatted_line = "  " . h["orgFileName"] . " " . date["typeStr"] . " " . date["timeStr"] . " " . h["headerText"] . " " . h["hiddenMetaLink"]
-         call add(formatted_lines_with_time_sorted[hour_int], formatted_line)
-         continue
+         let hour_match = matchlist(time_str, '^\(\d\{1,2}\):\(\d\{2}\)')
+         if len(hour_match) > 2
+           let hour_int = str2nr(hour_match[1])
+           let minute_int = str2nr(hour_match[2])
+           let time_index = hour_int * 60 + minute_int  " Convert to minutes for proper sorting
+           let formatted_line = "  " . h["orgFileName"] . " " . date["typeStr"] . " " . date["timeStr"] . " " . h["headerText"] . " " . h["hiddenMetaLink"]
+           call add(formatted_lines_with_time_sorted[time_index], formatted_line)
+           continue
+         endif
        endif
        let formatted_line = "  " . h["orgFileName"] . " " . date["typeStr"] . " " . h["headerText"] . " " . h["hiddenMetaLink"]
        call add(formatted_lines, formatted_line)
       endfor
     endfor
 
-    for hour_int in range(24)
-      for line in formatted_lines_with_time_sorted[hour_int]
+    " Display all times in sorted order
+    for time_index in range(24*60)
+      let time_entries = formatted_lines_with_time_sorted[time_index]
+      for line in time_entries
         call append(line_num, line)
         let line_num += 1
       endfor
