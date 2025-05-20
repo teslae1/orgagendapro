@@ -113,19 +113,15 @@ function! HandleOrgEnterKey()
       return
     endif
     
-    if header_text =~# '^TODO\s'
-      let new_header = substitute(line, 'TODO', 'DONE', '')
-      call setline('.', new_header)
-      
-      let current_datetime = strftime('[%Y-%m-%d %a %H:%M]')
-      call AddOrgDateText(line('.'), 'CLOSED', current_datetime)
-      return
+    if header_text =~# '^TODO\s' 
+      call MarkCurrentLineAsClosed('TODO', line)
+    elseif header_text =~# '^WAIT\s' 
+      call MarkCurrentLineAsClosed('WAIT', line)
     elseif header_text =~# '^DONE\s'
       let new_header = substitute(line, 'DONE', 'TODO', '')
       call setline('.', new_header)
-      
-      return
     endif
+    return
   endif
 
   if match(line, '- \[ \]') >= 0
@@ -158,44 +154,91 @@ function! HandleOrgEnterKey()
 endfunction
 autocmd FileType org nnoremap <buffer> <CR> :call HandleOrgEnterKey()<CR>
 
+function! MarkCurrentLineAsClosed(previousState, line)
+  let new_header = substitute(a:line, a:previousState, 'DONE', '')
+  call setline('.', new_header)
+  let current_datetime = strftime('[%Y-%m-%d %a %H:%M]')
+  call AddOrgDateText(line('.'), 'CLOSED', current_datetime)
+endfunction
+
 function! LineIsOrgCheckbox(line)
   return match(a:line, '^\(\s*\)- \[\s*[X -]\s*\]') >= 0
 endfunction
 
 function! AddNewItemAtBelowLine()
   let line = getline('.')
-  if LineIsOrgCheckbox(line) == 0
-    execute "normal! o"
-    return 
+  if LineIsOrgCheckbox(line)
+    call HandleAddNewCheckboxAtBelowLine(line)
+    return
   endif
-  
-  let indentation = matchstr(line, '^\s*')
-  
-  let new_line = indentation . '- [ ] '
-  
-  call append(line('.'), new_line)
-  
-  normal! j$
-  startinsert!
+  if LineIsOrgHeader(line)
+    call HandleAddNewHeaderAtBelowLine(line)
+    return
+  endif
 
+  execute "normal! o"
+endfunction
+
+function! HandleAddNewHeaderAtBelowLine(line)
+  let header_asterix_count = GetAsterixCountFromHeaderLine(a:line)
+  let current_line_nr = line('.')
+  let new_header = repeat('*', header_asterix_count) . ' '
+  let next_line_nr = current_line_nr + 1
+  let file_end = line('$')
+  while next_line_nr <= file_end
+    let next_line = getline(next_line_nr)
+    if LineIsOrgHeader(next_line)
+      " Found a header
+      break
+    endif
+    let next_line_nr += 1
+  endwhile
+  let insert_position = next_line_nr - 1
+  call append(insert_position, new_header)
+  call cursor(insert_position + 1, len(new_header) + 1)
+  startinsert!
 endfunction
 
 function! AddNewItemAtAboveLine()
   let line = getline('.')
-  if LineIsOrgCheckbox(line) == 0
-    execute "normal! o"
-    return 
+  if LineIsOrgCheckbox(line)
+    call HandleAddNewCheckboxAtAboveLine(line)
+    return
   endif
-  
-  let indentation = matchstr(line, '^\s*')
-  
+  if LineIsOrgHeader(line)
+    call HandleAddNewHeaderAtAboveLine(line)
+    return
+  endif
+
+  execute "normal! o"
+endfunction
+
+
+function! HandleAddNewCheckboxAtAboveLine(line)
+  let indentation = matchstr(a:line, '^\s*')
   let new_line = indentation . '- [ ] '
-  
   call append(line('.') - 1, new_line)
-  
   normal! k$
   startinsert!
+endfunction
 
+function! HandleAddNewHeaderAtAboveLine(line)
+  let header_asterix_count = GetAsterixCountFromHeaderLine(a:line)
+  let current_line_nr = line('.')
+  let new_header = repeat('*', header_asterix_count) . ' '
+  let previous_line_nr = current_line_nr - 1
+  let insert_position = previous_line_nr 
+  call append(insert_position, new_header)
+  call cursor(insert_position + 1, len(new_header) + 1)
+  startinsert!
+endfunction
+
+function! HandleAddNewCheckboxAtBelowLine(line)
+  let indentation = matchstr(a:line, '^\s*')
+  let new_line = indentation . '- [ ] '
+  call append(line('.'), new_line)
+  normal! j$
+  startinsert!
 endfunction
 
 autocmd FileType org nnoremap <buffer> <C-CR> :call AddNewItemAtBelowLine()<CR>
@@ -224,13 +267,13 @@ autocmd FileType org nnoremap <buffer> <S-h> :call SearchBackwardOrgHeader()<CR>
 function! SearchForward(pattern)
     let @/ = a:pattern
     normal! n
-    nohlsearch
+    call feedkeys(":nohlsearch\<CR>", 'n')
 endfunction
 
 function! SearchBackward(pattern)
     let @/ = a:pattern
     normal! N
-    nohlsearch
+    call feedkeys(":nohlsearch\<CR>", 'n')
 endfunction
 
 let g:narrow_view_active = 0
@@ -986,6 +1029,17 @@ function! s:PopulateOrgFold(source_filepath, source_line_nr, source_buffer_conte
   execute "normal! " . line_to_put_cursor . "j"
 endfunction
 
+function! GetAsterixCountFromHeaderLine(line)
+    let c = a:line[0]
+    let header_asterix_count = 0
+
+    while c == '*' && header_asterix_count < len(a:line)
+      let header_asterix_count += 1
+      let c = a:line[header_asterix_count]
+    endwhile
+    return header_asterix_count
+endfunction
+
 function! ExtractFoldsFromLines(source_buffer_contents, cursor_line_nr)
   let headers_at_root = []
   let current_level = 0
@@ -999,13 +1053,8 @@ function! ExtractFoldsFromLines(source_buffer_contents, cursor_line_nr)
     if line[0] != '*'
       continue
     endif
-    let c = line[0]
-    let header_asterix_count = 0
 
-    while c == '*' && header_asterix_count < len(line)
-      let header_asterix_count += 1
-      let c = line[header_asterix_count]
-    endwhile
+    let header_asterix_count = GetAsterixCountFromHeaderLine(line)
   
     let fold_obj = {
     \ "headerText": line,
