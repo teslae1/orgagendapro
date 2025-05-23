@@ -70,19 +70,6 @@ function! AddOrgDateText(line_num, date_type, date_text)
   endif
 endfunction
 
-function! AddOrgDateWithType(date_type)
-  let line = getline('.')
-  if !LineIsOrgHeader(line)
-    echo "Not on a header line"
-    return
-  endif
-  
-  let today = strftime('%Y-%m-%d %a')
-  let date_text = "<" . today . ">"
-  
-  call AddOrgDateText(line('.'), a:date_type, date_text)
-endfunction
-
 function! HandleOrgEnterKey()
   let line = getline('.')
 
@@ -497,8 +484,6 @@ endfunction
 autocmd FileType org nnoremap <buffer> <S-Right> :call ShiftOrgDateDays(1)<CR>
 autocmd FileType org nnoremap <buffer> <S-Left> :call ShiftOrgDateDays(-1)<CR>
 
-autocmd FileType org nnoremap <buffer> <Space>mds :call AddOrgDateWithType('SCHEDULED')<CR>
-autocmd FileType org nnoremap <buffer> <Space>mdd :call AddOrgDateWithType('DEADLINE')<CR>
 
 
 
@@ -1486,3 +1471,96 @@ endfunction
 
 autocmd FileType org nnoremap <buffer> <Tab> :call OrgTabHandler()<CR>
 autocmd FileType org inoremap <buffer> <Tab> <Esc>:call OrgTabHandler()<CR>
+
+
+function! s:OpenDatePicker(date_type)
+  let s:date_picker_type = a:date_type
+
+  let s:original_buffer = bufnr('%')
+  let s:original_line = line('.')
+  
+  let buf_name = 'orgdatepicker'
+  let buf_nr = bufnr(buf_name)
+  let win_id = bufwinid(buf_nr)
+  
+  if buf_nr > 0 && win_id != -1
+    call win_gotoid(win_id)
+  elseif buf_nr > 0
+    execute 'bot 10split +buffer' . buf_nr
+  else
+    execute 'bot 10split ' . buf_name
+    setlocal buftype=nofile bufhidden=wipe noswapfile nobuflisted
+    setlocal filetype=orgdatepicker
+    
+    syntax match OrgDatePickerWeekday /\(Mon\|Tue\|Wed\|Thu\|Fri\|Sat\|Sun\)/
+    highlight OrgDatePickerWeekday gui=bold
+    
+    nnoremap <buffer> <CR> :call <SID>SelectDate()<CR>
+    nnoremap <buffer> q :bwipeout!<CR>
+    nnoremap <buffer> <ESC> :bwipeout!<CR>
+  endif
+  
+  call s:PopulateDatePicker()
+endfunction
+
+function! s:PopulateDatePicker()
+  setlocal modifiable
+  
+  " Clear the buffer
+  silent! normal! ggdG
+  
+  let today = strftime('%Y-%m-%d')
+  let today_timestamp = localtime()
+  
+  let months_look_forward = 3
+  let days_look_forward = months_look_forward * 30
+  let dates = []
+  for i in range(0, days_look_forward)  
+    let timestamp = IncrementTimestampByDays(today_timestamp, i)
+    let date_str = strftime('%Y-%m-%d', timestamp)
+    let weekday = strftime('%a', timestamp)
+    
+    call add(dates, weekday . ' ' . date_str)
+  endfor
+  
+  let line_num = 0
+  for date in dates
+    call append(line_num, '  ' . date)
+    let line_num += 1
+  endfor
+  
+  call cursor(1, 1)  
+  
+  setlocal nomodifiable
+endfunction
+
+function! s:SelectDate()
+  " Get the date from the current line
+  let line = getline('.')
+  let date_pattern = '\(\d\{4}-\d\{2}-\d\{2}\)'
+  let matches = matchlist(line, date_pattern)
+  
+  if len(matches) > 1
+    let selected_date = matches[1]
+    
+    " Close the date picker
+    bwipeout!
+    
+    " Return to the original buffer and line
+    execute 'buffer ' . s:original_buffer
+    execute s:original_line
+    
+    " Get the day name
+    let timestamp = ConvertDateStrToTimestamp(selected_date)
+    let day_name = strftime('%a', timestamp)
+    
+    " Format the date
+    let date_text = '<' . selected_date . ' ' . day_name . '>'
+    
+    " Add the date with the appropriate type
+    call AddOrgDateText(line('.'), s:date_picker_type, date_text)
+  endif
+endfunction
+
+autocmd FileType org nnoremap <buffer> <Space>mds :call <SID>OpenDatePicker('SCHEDULED')<CR>
+autocmd FileType org nnoremap <buffer> <Space>mdd :call <SID>OpenDatePicker('DEADLINE')<CR>
