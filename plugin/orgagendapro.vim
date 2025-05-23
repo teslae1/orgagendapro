@@ -712,8 +712,22 @@ function! ExtractHeadersWithDatesFromLines(lines, date_str_prefixes_to_load_into
       continue
     endif
     
-    let next_line = a:lines[i+1]
-    let dates_with_types = GetDatesWithTypesFromLine(next_line)
+    let dates_with_types = []
+    let amount_dates_found_in_current_line_search = 0
+    let current_line_index = i + 1
+    while current_line_index == i + 1 || amount_dates_found_in_current_line_search > 0 
+        let next_line = a:lines[current_line_index]
+        let dates_with_types_current_line = GetDatesWithTypesFromLine(next_line)
+        let amount_dates_found_in_current_line_search = len(dates_with_types_current_line)
+        for d in dates_with_types_current_line
+          call add(dates_with_types, d)
+        endfor
+        let current_line_index += 1
+        if current_line_index >= len(a:lines)
+          break
+        endif
+    endwhile
+
     if len(dates_with_types) < 1
       continue
     endif
@@ -824,8 +838,10 @@ function! GetDatesWithTypesFromLine(line)
   let line = a:line
   
   let date_types = ['DEADLINE', 'SCHEDULED']
+  let default_date_type = date_types[1]
   let date_pattern = '<\(\d\{4}-\d\{2\}-\d\{2\}\)\s\+\w\{2,3\}\(\s\+\(\d\{1,2}:\d\{2\}\(-\d\{1,2}:\d\{2\}\)\?\)\)\?'
   
+  let date_start_positions_found = []
   for date_type in date_types
     let start_pos = 0
     
@@ -840,12 +856,8 @@ function! GetDatesWithTypesFromLine(line)
       if date_pos != -1 && date_pos - type_pos < 20
         let date_match = matchlist(line, date_pattern, date_pos)
         if len(date_match) > 1
-          let result = {"dateStr": date_match[1], "typeStr": date_type}
-          
-          if len(date_match) > 3 && date_match[3] != ''
-            let result["timeStr"] = date_match[3]
-          endif
-          
+          let result = CreateResultFromDateMatchList(date_match, date_type)
+          call add(date_start_positions_found, date_pos)
           call add(results, result)
         endif
       endif
@@ -854,7 +866,42 @@ function! GetDatesWithTypesFromLine(line)
     endwhile
   endfor
   
+  let start_pos = 0
+  while 1
+    let date_pos = match(line, date_pattern, start_pos)
+    if date_pos == -1
+      break
+    endif
+    
+    let already_processed = 0
+    for pos in date_start_positions_found
+      if date_pos == pos
+        let already_processed = 1
+        break
+      endif
+    endfor
+    
+    if !already_processed
+      let date_match = matchlist(line, date_pattern, date_pos)
+      if len(date_match) > 1
+        let result = CreateResultFromDateMatchList(date_match, default_date_type)
+        call add(results, result)
+      endif
+    endif
+    
+    let start_pos = date_pos + 1
+  endwhile
+  
   return results
+endfunction
+
+function! CreateResultFromDateMatchList(date_match, type_str)
+  let result = {"dateStr": a:date_match[1], "typeStr": a:type_str}
+  
+  if len(a:date_match) > 3 && a:date_match[3] != ''
+    let result["timeStr"] = a:date_match[3]
+  endif
+  return result
 endfunction
 
 function! GetOrgHeaderTextFromLine(line)
