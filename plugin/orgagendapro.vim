@@ -442,6 +442,32 @@ function! ExtractDateFromCurrentLine()
   return []
 endfunction
 
+function! ConvertDateStrToTimestamp(date_str)
+  let current_timestamp = localtime()
+  let forward_search = current_timestamp
+  let backward_search = current_timestamp 
+  let match_timestamp = ""
+  let days_range_to_search = 365 * 20
+
+  for i in range(days_range_to_search)
+    if ConvertTimestampToDatePrefixStr(forward_search) == a:date_str
+      let match_timestamp = forward_search
+      break
+    endif
+    let forward_search = IncrementTimestampByDays(forward_search, 1)
+    if ConvertTimestampToDatePrefixStr(backward_search) == a:date_str
+      let match_timestamp = backward_search
+      break
+    endif
+    let backward_search = IncrementTimestampByDays(backward_search, -1)
+  endfor
+  if len(match_timestamp) < 1
+    echo "current date could not be converted to timestamp - could not find in next or past 20 years"
+    return
+  endif
+  return match_timestamp
+endfunction
+
 function! ShiftOrgDateDays(days)
 
   let line = getline('.')
@@ -455,27 +481,7 @@ function! ShiftOrgDateDays(days)
   
   let [year, month, day, day_name, postfix, match_start, date_end, date_str] = date_result
 
-  let current_timestamp = localtime()
-  let forward_search = current_timestamp
-  let backward_search = current_timestamp 
-  let match_timestamp = ""
-  let days_range_to_search = 365 * 20
-  for i in range(days_range_to_search)
-    if ConvertTimestampToDatePrefixStr(forward_search) == date_str
-      let match_timestamp = forward_search
-      break
-    endif
-    let forward_search = IncrementTimestampByDays(forward_search, 1)
-    if ConvertTimestampToDatePrefixStr(backward_search) == date_str
-      let match_timestamp = backward_search
-      break
-    endif
-    let backward_search = IncrementTimestampByDays(backward_search, -1)
-  endfor
-  if len(match_timestamp) < 1
-    echo "current date could not be converted to timestamp - could not find in next or past 20 years"
-    return
-  endif
+  let match_timestamp = ConvertDateStrToTimestamp(date_str)
 
   let new_timestamp = IncrementTimestampByDays(match_timestamp, a:days)
   let new_date = ConvertTimestampToDatePrefixStr(new_timestamp)
@@ -579,18 +585,8 @@ function! s:PopulateOrgCalendar(mode, current_timestamp)
       endfor
     endfor
 
-    
-    let [year, month, day] = split(ordered_prefix, '-')
-    let timestamp = localtime()
-    
-    let days_diff = 0
-    let current_ymd = strftime('%Y-%m-%d', timestamp)
-    let [c_year, c_month, c_day] = split(current_ymd, '-')
-    let days_diff += (year - c_year) * 365
-    let days_diff += (month - c_month) * 30
-    let days_diff += (day - c_day)
-    let date_timestamp = timestamp + (days_diff * 86400)
-    
+    let date_timestamp = ConvertDateStrToTimestamp(ordered_prefix)
+
     let day_name = strftime('%A', date_timestamp)
     let current_date = strftime('%Y-%m-%d')
     let this_iteration_is_for_current_date = current_date == ordered_prefix
@@ -601,10 +597,6 @@ function! s:PopulateOrgCalendar(mode, current_timestamp)
     call append(line_num, day_name . " " . ordered_prefix)
     let line_num += 1
 
-    "if len(items_on_this_date) < 1
-    "  continue
-    "endif
-    
     let formatted_lines = []
     let formatted_lines_with_time_sorted = {}
     for i in range(24*60)  " Create slots for each minute of the day
