@@ -1463,6 +1463,26 @@ function! ShiftPriority(direction)
   call setline('.', new_line)
 endfunction
 
-" Add key mappings for priority shifting
 autocmd FileType org nnoremap <buffer> <S-Up> :call ShiftPriority("up")<CR>
 autocmd FileType org nnoremap <buffer> <S-Down> :call ShiftPriority("down")<CR>
+
+function! IndentCheckbox()
+  let line = getline('.')
+  let indented_line = '  ' . line
+  call setline('.', indented_line)
+  normal! $
+  startinsert!
+endfunction
+
+function! OrgTabHandler()
+  let line = getline('.')
+  if LineIsOrgCheckbox(line)
+    call IndentCheckbox()
+    return
+  endif
+  
+  execute "normal! \<Tab>"
+endfunction
+
+autocmd FileType org nnoremap <buffer> <Tab> :call OrgTabHandler()<CR>
+autocmd FileType org inoremap <buffer> <Tab> <Esc>:call OrgTabHandler()<CR>

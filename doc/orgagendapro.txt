@@ -21,6 +21,7 @@ let g:orgcal_filepaths = ['C:\my\org\file1.org', 'C:\my\org\file2.org']
   - shift + left arrow on "SCHEDULED <2025-01-14>"  | decrements date by one day 
   - space + mds on "* header"                       | adds SCHEDULED for current date
   - space + mdd on "* header"                       | adds DEADLINE for current date
+  - shift + up/down arrow on "* header"              | adds/modifies priority
   - shift + tab                                     | opens orgfold at the current header
 
 - Command when in ".org" files
