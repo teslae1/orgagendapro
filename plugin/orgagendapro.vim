@@ -1073,8 +1073,7 @@ function! s:PopulateOrgFold(source_filepath, source_line_nr, source_buffer_conte
   let s:line_to_fold_map = {}  " Reset the mapping
   let s:fold_structure = ExtractFoldsFromLines(a:source_buffer_contents, a:source_line_nr-1)
   
-  " Start rendering from line 6 (after the header)
-  let response = s:RenderFolds(s:fold_structure, 6)
+  let response = s:RenderFolds(s:fold_structure, 0)
   let line_to_put_cursor = response["lineToPutCursor"]
   normal! gg
   execute "normal! " . line_to_put_cursor . "j"
@@ -1188,14 +1187,6 @@ function! s:OpenOrgFold()
   setlocal modifiable
   silent! normal! ggdG
   
-  " Add header with key shortcuts
-  call append(0, "=============================================================================================")
-  call append(1, "OrgFold View")
-  call append(2, "Press <Enter> on an entry to go to its location")
-  call append(3, "Press <Tab> to expand/collapse a section")
-  call append(4, "Press 'q' to close")
-  call append(5, "=============================================================================================")
-  
   call s:PopulateOrgFold(s:source_file, s:source_line, s:source_buffer_contents)
   
   nnoremap <buffer> <CR> :call <SID>OrgFoldEnter()<CR>
@@ -1225,25 +1216,35 @@ endfunction
 
 function! s:ShowParentStructure()
   let current_line = line('.')
-  if has_key(s:line_to_fold_map, current_line)
-    let fold = s:line_to_fold_map[current_line]
-    let hierarchy = []
-    
-    " Add the current fold's header text
-    let header_text = substitute(fold["headerText"], '^\*\+\s\+', '', '')
-    call add(hierarchy, header_text)
-    
-    " Add all parents
-    let parent = fold["parent"]
-    while !empty(parent)
-      let parent_text = substitute(parent["headerText"], '^\*\+\s\+', '', '')
-      call insert(hierarchy, parent_text)
-      let parent = parent["parent"]
-    endwhile
-    
-    " Display the hierarchy in the command line
-    echo join(hierarchy, ' / ')
+  if has_key(s:line_to_fold_map, current_line) == 0
+    return
   endif
+
+  let fold = s:line_to_fold_map[current_line]
+  let hierarchy = []
+  
+  " Add the current fold's header text
+  let header_text = substitute(fold["headerText"], '^\*\+\s\+', '', '')
+  call add(hierarchy, header_text)
+  
+  " Add all parents
+  let parent = fold["parent"]
+  while !empty(parent)
+    let parent_text = substitute(parent["headerText"], '^\*\+\s\+', '', '')
+    call insert(hierarchy, parent_text)
+    let parent = parent["parent"]
+  endwhile
+  
+  " Display the hierarchy in the command line
+  let hierarchyStr = join(hierarchy, ' / ')
+  let winwidth = &columns
+  let shouldShorten = len(hierarchyStr) > winwidth - 8
+  if shouldShorten
+    let hierarchyStr = hierarchyStr[0:(winwidth - 16)] . "..." 
+  endif
+
+  echo hierarchyStr
+
 endfunction
 
 function! s:RerenderFolds()
@@ -1269,7 +1270,6 @@ function! s:OrgFoldEnter()
   endif
 endfunction
 
-" Add autocmd to show parent structure when cursor moves in orgfold buffer
 augroup OrgFoldParentStructure
   autocmd!
   autocmd CursorMoved orgfold call s:ShowParentStructure()

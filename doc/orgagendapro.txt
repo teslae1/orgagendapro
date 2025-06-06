@@ -28,11 +28,15 @@ let g:orgcal_filepaths = ['C:\my\org\file1.org', 'C:\my\org\file2.org']
 - :OrgState                                         | opens orgstate view with PROJ as state
 - :OrgState WAIT                                    | opens orgstate view with the first argument as state (in this example would be WAIT)
 
-- Key shortcuts when in calendar 
-  - are displayed in the top 
-- Key shortcuts when in orgfold
-  - are displayed in the top 
 - Key shortcuts when in orgstate 
+  - are displayed in the top 
+
+- Key shortcuts when in orgfold
+   - tab                                            | expand/collapse a section
+   - q                                              | close 
+   - enter                                          | go to entry location in file
+
+- Key shortcuts when in calendar 
   - are displayed in the top 
 
 vim:tw=78:ts=8:ft=help:norl:
