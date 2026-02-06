@@ -772,14 +772,16 @@ function! ExtractHeadersWithDatesFromLines(lines, date_str_prefixes_to_load_into
     let dates_with_types = []
     let amount_dates_found_in_current_line_search = 0
     let current_line_index = i + 1
+    let header_relative_line_number = 1
     while current_line_index == i + 1 || amount_dates_found_in_current_line_search > 0 
         let next_line = a:lines[current_line_index]
-        let dates_with_types_current_line = GetDatesWithTypesFromLine(next_line)
+        let dates_with_types_current_line = GetDatesWithTypesFromLine(next_line, header_relative_line_number)
         let amount_dates_found_in_current_line_search = len(dates_with_types_current_line)
         for d in dates_with_types_current_line
           call add(dates_with_types, d)
         endfor
         let current_line_index += 1
+        let header_relative_line_number += 1
         if current_line_index >= len(a:lines)
           break
         endif
@@ -792,18 +794,17 @@ function! ExtractHeadersWithDatesFromLines(lines, date_str_prefixes_to_load_into
     let dates_with_types_within_range = []
     let upcoming_deadline_days_in_future = 0
     let past_schedule_days = 0
-    let date_with_types_iteration = -1
     for date in dates_with_types
-      let date_with_types_iteration += 1
       for valid_date_prefix in a:date_str_prefixes_to_load_into_calendar
         if date["dateStr"] == valid_date_prefix
           call add(dates_with_types_within_range, date)
           break
         endif
       endfor
-      if past_schedule_days == 0 && date_with_types_iteration < 3 "we try to find a match in the first few dates of the items and skip if already found
+      if past_schedule_days == 0 
         for days_in_past in keys(a:past_days_scheduled_items_date_str_prefixes_to_load_into_calendar)
-          if date["dateStr"] == a:past_days_scheduled_items_date_str_prefixes_to_load_into_calendar[days_in_past] && GetOrgHeaderTextFromLine(line) !~# 'DONE'  
+           "only ever use dates from line immediatly under to match on past schedule match
+          if date["dateStr"] == a:past_days_scheduled_items_date_str_prefixes_to_load_into_calendar[days_in_past] && date["itemRelativeLineNumber"] == 1 &&  GetOrgHeaderTextFromLine(line) !~# 'DONE'  
             let past_schedule_days = days_in_past
             break
           endif
@@ -902,7 +903,7 @@ function! StartsWith(to_match, str)
   return a:str =~# '^' . a:to_match
 endfunction
 
-function! GetDatesWithTypesFromLine(line)
+function! GetDatesWithTypesFromLine(line, item_relative_line_number)
   let results = []
   let line = a:line
   
@@ -925,7 +926,7 @@ function! GetDatesWithTypesFromLine(line)
       if date_pos != -1 && date_pos - type_pos < 20
         let date_match = matchlist(line, date_pattern, date_pos)
         if len(date_match) > 1
-          let result = CreateResultFromDateMatchList(date_match, date_type)
+          let result = CreateResultFromDateMatchList(date_match, date_type, a:item_relative_line_number)
           call add(date_start_positions_found, date_pos)
           call add(results, result)
         endif
@@ -953,7 +954,7 @@ function! GetDatesWithTypesFromLine(line)
     if !already_processed
       let date_match = matchlist(line, date_pattern, date_pos)
       if len(date_match) > 1
-        let result = CreateResultFromDateMatchList(date_match, default_date_type)
+        let result = CreateResultFromDateMatchList(date_match, default_date_type, a:item_relative_line_number)
         call add(results, result)
       endif
     endif
@@ -964,8 +965,8 @@ function! GetDatesWithTypesFromLine(line)
   return results
 endfunction
 
-function! CreateResultFromDateMatchList(date_match, type_str)
-  let result = {"dateStr": a:date_match[1], "typeStr": a:type_str}
+function! CreateResultFromDateMatchList(date_match, type_str, header_relative_line_number)
+  let result = {"dateStr": a:date_match[1], "typeStr": a:type_str, "itemRelativeLineNumber": a:header_relative_line_number}
   
   if len(a:date_match) > 3 && a:date_match[3] != ''
     let result["timeStr"] = a:date_match[3]
