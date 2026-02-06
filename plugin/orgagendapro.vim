@@ -667,34 +667,29 @@ function! s:PopulateOrgCalendar(mode, current_timestamp)
       endfor
     endif
 
-
-    for i in range(upcoming_deadline_days_in_future)
-      let lines = upcoming_day_lines_map[i+1]
-      call sort(lines, function('s:ComparePriority'))
-      for item in lines
-        call append(line_num, item["line"])
-        let line_num += 1
-      endfor
-    endfor
-    
-
-    for i in range(past_schedule_days_in_past)
-      let lines = past_schedule_day_lines_map[i+1] 
-      call sort(lines, function('s:ComparePriority'))
-      for item in lines
-        call append(line_num, item["line"])
-        let line_num += 1
-      endfor
-    endfor
+    let line_num = AppendAllLinesForDaysAndGetNewLineNum(upcoming_deadline_days_in_future,upcoming_day_lines_map, line_num)
+    let line_num = AppendAllLinesForDaysAndGetNewLineNum(past_schedule_days_in_past,past_schedule_day_lines_map, line_num)
 
     call append(line_num, "")
     let line_num += 1
-
   endfor
 
   
   normal! ggj
   execute "normal! " . line_to_put_cursor_after_rendering . "j"
+endfunction
+
+function! AppendAllLinesForDaysAndGetNewLineNum(amount_days, day_lines_map, current_line_num)
+  let line_num = a:current_line_num
+  for i in range(a:amount_days)
+    let lines = a:day_lines_map[i+1]
+    call sort(lines, function('s:ComparePriority'))
+    for item in lines
+      call append(line_num, item["line"])
+      let line_num += 1
+    endfor
+  endfor
+  return line_num
 endfunction
 
 function! GetUpcomingDeadlinesToLoadIntoCalendar(mode, current_timestamp)
