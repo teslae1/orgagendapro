@@ -513,7 +513,7 @@ augroup OrgCalHighlight
 
   " Highlight past schedule lines (e.g., " d. ago: ")
   autocmd FileType orgcal syntax match OrgCalPastSchedule /\d\+\s\+d\. ago:/
-  autocmd FileType orgcal highlight OrgCalPastSchedule ctermfg=Red guifg=Gray40
+  autocmd FileType orgcal highlight OrgCalPastSchedule ctermfg=Red guifg=Red
 
   autocmd FileType orgcal setlocal conceallevel=2
   autocmd FileType orgcal setlocal concealcursor=nvic
@@ -693,12 +693,7 @@ function! AppendAllLinesForDaysAndGetNewLineNum(amount_days, day_lines_map, curr
 endfunction
 
 function! GetUpcomingDeadlinesToLoadIntoCalendar(mode, current_timestamp)
-  if a:mode != 'daily'  
-    return {}
-  endif
-  let act_current_time = localtime()
-  let current_render_is_not_for_present_day = act_current_time + 10 < act_current_time || act_current_time - 10 > act_current_time
-  if current_render_is_not_for_present_day
+  if ModeIsDailyAndRenderIsForPresentDay(a:mode) == 0
     return {}
   endif
   let days_in_future_upcoming_deadline = GetUpcomingDeadlineDaysInFutureConfiguration()
@@ -709,6 +704,19 @@ function! GetUpcomingDeadlinesToLoadIntoCalendar(mode, current_timestamp)
     let day_prefix_map[i+1] = date_prefixes[i]
   endfor
   return day_prefix_map
+endfunction
+
+function! ModeIsDailyAndRenderIsForPresentDay(mode)
+  if a:mode != 'daily'  
+    return 0
+  endif
+  let act_current_time = localtime()
+  let current_render_is_not_for_present_day = act_current_time + 10 < act_current_time || act_current_time - 10 > act_current_time
+  if current_render_is_not_for_present_day
+    return 0
+  endif
+
+  return 1 
 endfunction
 
 function! GetUpcomingDeadlineDaysInFutureConfiguration()
@@ -730,17 +738,10 @@ function! GetGlobalOrDefault(global_variable_name, default)
 endfunction
 
 function! GetPastScheduleDatesToLoadIntoCalendar(mode, current_timestamp)
-" TODO: consider refactor for duplication
-  if a:mode != 'daily'  
-    return {}
-  endif
-  let act_current_time = localtime()
-  let current_render_is_not_for_present_day = act_current_time + 10 < act_current_time || act_current_time - 10 > act_current_time
-  if current_render_is_not_for_present_day
+  if ModeIsDailyAndRenderIsForPresentDay(a:mode) == 0
     return {}
   endif
   let days_in_past_scheduled = GetPastScheduleDaysInPastConfiguration()
-  " TODO: make sure you get this call correct
   let date_prefixes = GetDatePrefixesByRangeFromToday(days_in_past_scheduled, -1, a:current_timestamp)
 
   let day_prefix_map = {}
