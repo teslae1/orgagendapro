@@ -807,7 +807,7 @@ function! ExtractHeadersWithDatesFromLines(lines, date_str_prefixes_to_load_into
       endfor
       if past_schedule_days == 0 && date_with_types_iteration < 3 "we try to find a match in the first few dates of the items and skip if already found
         for days_in_past in keys(a:past_days_scheduled_items_date_str_prefixes_to_load_into_calendar)
-          if date["dateStr"] == a:past_days_scheduled_items_date_str_prefixes_to_load_into_calendar[days_in_past]
+          if date["dateStr"] == a:past_days_scheduled_items_date_str_prefixes_to_load_into_calendar[days_in_past] && GetOrgHeaderTextFromLine(line) !~# 'DONE'  
             let past_schedule_days = days_in_past
             break
           endif
