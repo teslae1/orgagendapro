@@ -510,7 +510,11 @@ augroup OrgCalHighlight
   " Add priority highlighting
   autocmd FileType orgcal highlight OrgCalPriority guifg=DarkGreen gui=bold
   autocmd FileType orgcal highlight link OrgCalHiddenMeta Conceal
-  
+
+  " Highlight past schedule lines (e.g., " d. ago: ")
+  autocmd FileType orgcal syntax match OrgCalPastSchedule /\d\+\s\+d\. ago:/
+  autocmd FileType orgcal highlight OrgCalPastSchedule ctermfg=Red guifg=Red
+
   autocmd FileType orgcal setlocal conceallevel=2
   autocmd FileType orgcal setlocal concealcursor=nvic
 augroup END
@@ -536,11 +540,12 @@ function! s:PopulateOrgCalendar(mode, current_timestamp)
 
   let date_str_prefixes_to_load_into_calendar = GetOrderedDatePrefixesToLoadIntoCalendar(a:mode, a:current_timestamp)
   let upcoming_days_in_future_deadline_date_str_prefixes_to_load_into_calendar = GetUpcomingDeadlinesToLoadIntoCalendar(a:mode, a:current_timestamp)
+  let past_days_scheduled_items_date_str_prefixes_to_load_into_calendar = GetPastScheduleDatesToLoadIntoCalendar(a:mode, a:current_timestamp)
   let headers_with_dates = []
   for org_file in g:orgcal_filepaths
     let file_lines = readfile(org_file)
     let org_file_name = fnamemodify(org_file, ":t")
-    for h in ExtractHeadersWithDatesFromLines(file_lines, date_str_prefixes_to_load_into_calendar, upcoming_days_in_future_deadline_date_str_prefixes_to_load_into_calendar, org_file, org_file_name)
+    for h in ExtractHeadersWithDatesFromLines(file_lines, date_str_prefixes_to_load_into_calendar, upcoming_days_in_future_deadline_date_str_prefixes_to_load_into_calendar, past_days_scheduled_items_date_str_prefixes_to_load_into_calendar, org_file, org_file_name)
       call add(headers_with_dates, h)
     endfor
   endfor
@@ -631,7 +636,14 @@ function! s:PopulateOrgCalendar(mode, current_timestamp)
       let upcoming_day_lines_map[i+1] = []
     endfor
 
+    let past_schedule_day_lines_map = {}
+    let past_schedule_days_in_past = GetPastScheduleDaysInPastConfiguration() 
+    for i in range(past_schedule_days_in_past)
+      let past_schedule_day_lines_map[i+1] = []
+    endfor
+
     if this_iteration_is_for_current_date 
+
       for potential_upcoming_deadline_item in headers_with_dates
         let upcoming_days_deadline = potential_upcoming_deadline_item["upcomingDeadlineDays"]
         if upcoming_days_deadline > 0
@@ -642,33 +654,46 @@ function! s:PopulateOrgCalendar(mode, current_timestamp)
             \ })
         endif
       endfor
+
+      for potential_past_schedule_item in headers_with_dates
+        let past_schedule_days = potential_past_schedule_item["pastScheduleDays"]
+        if past_schedule_days > 0
+          let formatted_line = "  " . potential_past_schedule_item["orgFileName"] . " " . past_schedule_days . " d. ago: " . potential_past_schedule_item["headerText"] . " " . potential_past_schedule_item["hiddenMetaLink"]
+          call add(past_schedule_day_lines_map[past_schedule_days], {
+            \ "line": formatted_line,
+            \ "priority": potential_past_schedule_item["priority"]
+            \ })
+        endif
+      endfor
     endif
 
-    for i in range(upcoming_deadline_days_in_future)
-      let lines = upcoming_day_lines_map[i+1]
-      " Sort by priority
-      call sort(lines, function('s:ComparePriority'))
-      for item in lines
-        call append(line_num, item["line"])
-        let line_num += 1
-      endfor
-    endfor
-    
+    let line_num = AppendAllLinesForDaysAndGetNewLineNum(upcoming_deadline_days_in_future,upcoming_day_lines_map, line_num)
+    let line_num = AppendAllLinesForDaysAndGetNewLineNum(past_schedule_days_in_past,past_schedule_day_lines_map, line_num)
+
     call append(line_num, "")
     let line_num += 1
   endfor
+
   
   normal! ggj
   execute "normal! " . line_to_put_cursor_after_rendering . "j"
 endfunction
 
+function! AppendAllLinesForDaysAndGetNewLineNum(amount_days, day_lines_map, current_line_num)
+  let line_num = a:current_line_num
+  for i in range(a:amount_days)
+    let lines = a:day_lines_map[i+1]
+    call sort(lines, function('s:ComparePriority'))
+    for item in lines
+      call append(line_num, item["line"])
+      let line_num += 1
+    endfor
+  endfor
+  return line_num
+endfunction
+
 function! GetUpcomingDeadlinesToLoadIntoCalendar(mode, current_timestamp)
-  if a:mode != 'daily'  
-    return {}
-  endif
-  let act_current_time = localtime()
-  let current_render_is_not_for_present_day = act_current_time + 10 < act_current_time || act_current_time - 10 > act_current_time
-  if current_render_is_not_for_present_day
+  if ModeIsDailyAndRenderIsForPresentDay(a:mode) == 0
     return {}
   endif
   let days_in_future_upcoming_deadline = GetUpcomingDeadlineDaysInFutureConfiguration()
@@ -681,8 +706,25 @@ function! GetUpcomingDeadlinesToLoadIntoCalendar(mode, current_timestamp)
   return day_prefix_map
 endfunction
 
+function! ModeIsDailyAndRenderIsForPresentDay(mode)
+  if a:mode != 'daily'  
+    return 0
+  endif
+  let act_current_time = localtime()
+  let current_render_is_not_for_present_day = act_current_time + 10 < act_current_time || act_current_time - 10 > act_current_time
+  if current_render_is_not_for_present_day
+    return 0
+  endif
+
+  return 1 
+endfunction
+
 function! GetUpcomingDeadlineDaysInFutureConfiguration()
     return GetGlobalOrDefault('days_in_future_upcoming_deadline_to_show_in_daily_mode', 18)
+endfunction
+
+function! GetPastScheduleDaysInPastConfiguration()
+  return GetGlobalOrDefault('days_in_past_schedule_to_show_in_daily_mode', 18)
 endfunction
 
 function! GetGlobalOrDefault(global_variable_name, default)
@@ -695,7 +737,22 @@ function! GetGlobalOrDefault(global_variable_name, default)
   endif
 endfunction
 
-function! ExtractHeadersWithDatesFromLines(lines, date_str_prefixes_to_load_into_calendar, upcoming_days_in_future_deadline_date_str_prefixes_to_load_into_calendar, org_file, org_file_name)
+function! GetPastScheduleDatesToLoadIntoCalendar(mode, current_timestamp)
+  if ModeIsDailyAndRenderIsForPresentDay(a:mode) == 0
+    return {}
+  endif
+  let days_in_past_scheduled = GetPastScheduleDaysInPastConfiguration()
+  let date_prefixes = GetDatePrefixesByRangeFromToday(days_in_past_scheduled, -1, a:current_timestamp)
+
+  let day_prefix_map = {}
+  let len_date_prefixes = len(date_prefixes)
+  for i in range(len_date_prefixes)
+    let day_prefix_map[i+1] = date_prefixes[len_date_prefixes-i-1] 
+  endfor
+  return day_prefix_map
+endfunction
+
+function! ExtractHeadersWithDatesFromLines(lines, date_str_prefixes_to_load_into_calendar, upcoming_days_in_future_deadline_date_str_prefixes_to_load_into_calendar, past_days_scheduled_items_date_str_prefixes_to_load_into_calendar, org_file, org_file_name)
   let line_num = 0
   
   let in_todo_item = 0
@@ -734,13 +791,24 @@ function! ExtractHeadersWithDatesFromLines(lines, date_str_prefixes_to_load_into
 
     let dates_with_types_within_range = []
     let upcoming_deadline_days_in_future = 0
+    let past_schedule_days = 0
+    let date_with_types_iteration = -1
     for date in dates_with_types
+      let date_with_types_iteration += 1
       for valid_date_prefix in a:date_str_prefixes_to_load_into_calendar
         if date["dateStr"] == valid_date_prefix
           call add(dates_with_types_within_range, date)
           break
         endif
       endfor
+      if past_schedule_days == 0 && date_with_types_iteration < 3 "we try to find a match in the first few dates of the items and skip if already found
+        for days_in_past in keys(a:past_days_scheduled_items_date_str_prefixes_to_load_into_calendar)
+          if date["dateStr"] == a:past_days_scheduled_items_date_str_prefixes_to_load_into_calendar[days_in_past] && GetOrgHeaderTextFromLine(line) !~# 'DONE'  
+            let past_schedule_days = days_in_past
+            break
+          endif
+        endfor
+      endif
       if date["typeStr"] == "DEADLINE"
         for days_in_future in keys(a:upcoming_days_in_future_deadline_date_str_prefixes_to_load_into_calendar)
           if date["dateStr"] == a:upcoming_days_in_future_deadline_date_str_prefixes_to_load_into_calendar[days_in_future]
@@ -751,7 +819,7 @@ function! ExtractHeadersWithDatesFromLines(lines, date_str_prefixes_to_load_into
       endif
     endfor
 
-    if len(dates_with_types_within_range) < 1 && upcoming_deadline_days_in_future < 1
+    if len(dates_with_types_within_range) < 1 && upcoming_deadline_days_in_future < 1 && past_schedule_days < 1
       continue
     endif
 
@@ -767,7 +835,8 @@ function! ExtractHeadersWithDatesFromLines(lines, date_str_prefixes_to_load_into
       \ "hiddenMetaLink": s:OrgCalHiddenMeta(a:org_file . "|" . header_line_col),
       \ "orgFileName": a:org_file_name,
       \ "upcomingDeadlineDays": upcoming_deadline_days_in_future,
-      \ "priority": priority
+      \ "pastScheduleDays": past_schedule_days,
+      \ "priority": priority,
       \ }
     call add(response, headerDate)
   endfor

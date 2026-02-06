@@ -6,6 +6,11 @@ for Vim with zero dependencies - all written in vimscript.
 - Tell the org calendar which ".org" files it should take its data from by definning this global variable in your .vimrc
 let g:orgcal_filepaths = ['C:\my\org\file1.org', 'C:\my\org\file2.org']
 
+- To handle display of items past schedule in daily mode add define this global variable in your .vimrc
+let g:days_in_past_schedule_to_show_in_daily_mode = 30
+
+And to turn it off completely just set it to 0
+
 - Key shortcuts when in ".org" files
   - ctrl + C                                        | opens calendar view
   - Enter on a "- [ ]"                              | cycles its states of "-/x/ "
