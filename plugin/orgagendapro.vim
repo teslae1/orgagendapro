@@ -1217,6 +1217,10 @@ function! ExtractFoldsFromLines(source_buffer_contents, cursor_line_nr)
 endfunction
 
 function! s:OpenOrgFold()
+  if &modified
+    echo "OrgFold: unsaved changes, write the file first." 
+    return
+  endif
   let s:source_file = expand('%:p')
   let s:source_win_id = win_getid()
   let s:source_line = line('.')
