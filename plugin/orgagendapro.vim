@@ -1261,7 +1261,7 @@ function! s:OpenOrgFold()
   
   " Always clear and repopulate
   setlocal modifiable
-  silent! normal! ggdG
+  silent! keepmarks %delete _
   
   call s:PopulateOrgFold(s:source_file, s:source_line, s:source_buffer_contents)
   
@@ -1281,7 +1281,7 @@ function! s:OrgFoldToggle()
     
     " Redraw the buffer with updated fold state
     setlocal modifiable
-    silent! normal! ggdG
+    silent! keepmarks %delete _
     call s:RerenderFolds()
     setlocal nomodifiable
     
