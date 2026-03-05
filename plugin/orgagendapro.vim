@@ -1106,6 +1106,7 @@ nnoremap <C-c> :OrgCal<CR>
 
 let s:fold_structure = []
 let s:line_to_fold_map = {}
+let s:source_win_id = -1
 
 function! s:RenderFolds(folds, current_line_nr)
   let scoped_current_line_nr = a:current_line_nr
@@ -1217,6 +1218,7 @@ endfunction
 
 function! s:OpenOrgFold()
   let s:source_file = expand('%:p')
+  let s:source_win_id = win_getid()
   let s:source_line = line('.')
   let s:source_buffer_contents = getline(1, '$')
   
@@ -1330,11 +1332,11 @@ function! s:OrgFoldEnter()
     let fold = s:line_to_fold_map[current_line]
     let target_line_nr = fold["lineNr"] + 1  " +1 because Vim line numbers start at 1 but indices start at 0
     
-    " Close the orgfold buffer
-    bwipeout!
-    
+    " Navigate back to the source window
+    call win_gotoid(s:source_win_id)
+
     " Navigate to the original file and position
-    execute "edit " . s:source_file
+    execute "edit " . fnameescape(s:source_file)
     execute "normal! " . target_line_nr . "G"
     normal! z.  " Center the view on the current line
   endif
