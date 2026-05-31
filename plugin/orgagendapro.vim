@@ -1253,10 +1253,14 @@ function! s:OpenOrgFold()
     syntax match OrgFoldFoldDots /\[\.\.\]/ contained
     syntax match OrgFoldFoldBracket /\[\|\]/ contained containedin=OrgFoldFoldDots
     syntax match OrgFoldCollapsed /\s\[\.\.\]$/ contains=OrgFoldFoldDots
+    syntax match OrgFoldDone /DONE/ contained containedin=OrgFoldHeader
+    syntax match OrgFoldWait /WAIT/ contained containedin=OrgFoldHeader
     
     highlight OrgFoldHeader gui=bold guifg=DarkOrange
     highlight OrgFoldFoldDots gui=bold guifg=DarkOrange
     highlight OrgFoldFoldBracket gui=bold guifg=Gray40
+    highlight OrgFoldDone gui=bold ctermfg=Green guifg=#66ff66
+    highlight OrgFoldWait gui=bold ctermfg=Yellow guifg=#ffff00
   endif
   
   " Always clear and repopulate
