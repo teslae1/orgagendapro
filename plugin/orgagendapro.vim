@@ -148,7 +148,7 @@ autocmd FileType org nnoremap <buffer> <CR> :call HandleOrgEnterKey()<CR>
 function! MarkCurrentLineAsClosed(previousState, line)
   let new_header = substitute(a:line, a:previousState, 'DONE', '')
   call setline('.', new_header)
-  let current_datetime = strftime('[%Y-%m-%d %a %H:%M]')
+  let current_datetime = '[' . strftime('%Y-%m-%d') . ' ' . GetEnglishWeekdayAbbr(localtime()) . strftime(' %H:%M') . ']'
   call AddOrgDateText(line('.'), 'CLOSED', current_datetime)
 endfunction
 
@@ -352,6 +352,16 @@ function! ShiftOrgDateYears(years)
   call cursor(line('.'), cursor_col)
 endfunction
 
+function! GetEnglishWeekdayAbbr(timestamp)
+  let days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  return days[strftime('%w', a:timestamp)]
+endfunction
+
+function! GetEnglishWeekdayFull(timestamp)
+  let days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  return days[strftime('%w', a:timestamp)]
+endfunction
+
 function! EnsurePrefixZeroIfLessThanTen(numb)
   if type(a:numb) == v:t_string && len(a:numb) >= 2
      return a:numb
@@ -472,7 +482,7 @@ function! ShiftOrgDateDays(days)
 
   let new_timestamp = IncrementTimestampByDays(match_timestamp, a:days)
   let new_date = ConvertTimestampToDatePrefixStr(new_timestamp)
-  let new_day = strftime('%a', new_timestamp)
+  let new_day = GetEnglishWeekdayAbbr(new_timestamp)
   let new_date_tag = '<' . new_date . ' ' . new_day . postfix . '>'
   call UpdateDateOnCurrentLine(line, match_start, new_date_tag, date_end)
   
@@ -577,7 +587,7 @@ function! s:PopulateOrgCalendar(mode, current_timestamp)
 
     let date_timestamp = ConvertDateStrToTimestamp(ordered_prefix)
 
-    let day_name = strftime('%A', date_timestamp)
+    let day_name = GetEnglishWeekdayFull(date_timestamp)
     let current_date = strftime('%Y-%m-%d')
     let this_iteration_is_for_current_date = current_date == ordered_prefix
     
@@ -1645,7 +1655,7 @@ function! s:PopulateDatePicker()
   for i in range(0, days_look_forward)  
     let timestamp = IncrementTimestampByDays(today_timestamp, i)
     let date_str = strftime('%Y-%m-%d', timestamp)
-    let weekday = strftime('%a', timestamp)
+    let weekday = GetEnglishWeekdayAbbr(timestamp)
     
     call add(dates, weekday . ' ' . date_str)
   endfor
@@ -1679,7 +1689,7 @@ function! s:SelectDate()
     
     " Get the day name
     let timestamp = ConvertDateStrToTimestamp(selected_date)
-    let day_name = strftime('%a', timestamp)
+    let day_name = GetEnglishWeekdayAbbr(timestamp)
     
     " Format the date
     let date_text = '<' . selected_date . ' ' . day_name . '>'
