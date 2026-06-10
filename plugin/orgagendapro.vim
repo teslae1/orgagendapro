@@ -1,6 +1,7 @@
 augroup OrgHighlights
   autocmd!
-  autocmd FileType org syntax match OrgCompletedItem /^.*\[X\].*$/  
+  autocmd FileType org silent! syntax clear orgStrikethrough
+  autocmd FileType org syntax match OrgCompletedItem /^.*\[X\].*$/
   autocmd FileType org highlight OrgCompletedItem ctermfg=DarkGray guifg=Gray40
   
   autocmd FileType org syntax match OrgUncheckedCheckbox /\[ \]/ containedin=ALL
